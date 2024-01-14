@@ -1,0 +1,3 @@
+[submodule "src/vendor/pico-stdio-usb-simple"]
+	path = src/vendor/pico-stdio-usb-simple
+	url = https://github.com/mordae/pico-stdio-usb-simple
