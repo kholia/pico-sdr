@@ -36,7 +36,7 @@
 
 #define CLK_SYS_HZ (250 * MHZ)
 
-#define EXTRA_BITS 3
+#define EXTRA_BITS 1
 #define NUM_SAMPLES 32
 #define RSSI_ALPHA 1
 #define LPF_SAMPLES 8
@@ -63,6 +63,7 @@ static volatile struct status {
 	unsigned rssi_max;
 	unsigned sample_rate;
 	int frequency;
+	int angle;
 	int I, Q;
 } status;
 
@@ -280,6 +281,32 @@ static float lo_freq_init(float req_freq)
 	return freq;
 }
 
+inline static __unused int cheap_atan2(int y, int x)
+{
+	static const int deg[2][2] = { { 192, 0 }, { 128, 64 } };
+	return deg[y < 0][x < 0];
+}
+
+inline static __unused int imaskmod(int x, int mask)
+{
+	return (x < 0) ? -((-x) & mask) : x & mask;
+}
+
+inline static __unused int cheap_angle_diff(int angle1, int angle2)
+{
+	int diff = angle2 - angle1;
+
+	diff = imaskmod(diff, 255);
+
+	if (diff > 128)
+		return diff - 256;
+
+	if (diff < -128)
+		return diff + 256;
+
+	return diff;
+}
+
 inline static __unused unsigned popcount(unsigned v)
 {
 	v = v - ((v >> 1) & 0x55555555);
@@ -389,6 +416,8 @@ static void rf_rx(void)
 
 	int delta_watermark = 0;
 	unsigned prev_transfers = 0;
+
+	int angle = 0;
 
 	while (true) {
 		int I = 0, Q = 0;
@@ -562,6 +591,8 @@ static void rf_rx(void)
 
 		prevQ = Q;
 
+		angle = (angle * 7 + cheap_angle_diff(angle, cheap_atan2(I, Q))) / 8;
+
 		unsigned ssi = I * I + Q * Q;
 		const unsigned alpha = RSSI_ALPHA;
 
@@ -572,6 +603,7 @@ static void rf_rx(void)
 		status.rssi_raw = assi2 / 16;
 		status.frequency = frequency;
 		status.sample_rate = CLK_SYS_HZ / (delta_watermark * 32);
+		status.angle = angle;
 		status.I = I;
 		status.Q = Q;
 		status.mtime = time_us_32();
@@ -692,8 +724,9 @@ static void command(const char *cmd)
 
 			float rssi_rel = (float)st.rssi_raw / (float)st.rssi_max;
 
-			printf("%5.1f dB (%4u) [%5u %+6i] ", 10.0f * log10f(rssi_rel),
-			       (unsigned)sqrt(st.rssi_raw), st.sample_rate, st.frequency);
+			printf("%5.1f dB (%4u) [%5u %+6i] %+4.0f ", 10.0f * log10f(rssi_rel),
+			       (unsigned)sqrt(st.rssi_raw), st.sample_rate, st.frequency,
+			       360.0f * st.angle / 256.0f);
 
 			plot_IQ(st.I, st.Q);
 			puts("");
