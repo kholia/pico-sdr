@@ -36,13 +36,15 @@
 
 #define CLK_SYS_HZ (250 * MHZ)
 
-#define EXTRA_BITS 1
+#define EXTRA_BITS 4
 #define NUM_SAMPLES 32
 #define RSSI_ALPHA 1
-#define LPF_SAMPLES 8
-#define HPF_ALPHA 2
+#define LPF_SAMPLES 8 /* 8 */
+#define HPF_ALPHA 2   /* 2 */
 #define IIR_ON 0
 #define SPEED 3
+
+#define SLEEP_US 16666
 
 #define LED_PIN 25
 
@@ -52,7 +54,9 @@ static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t rx_buf[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
+#if SPEED < 3
 static int8_t mixer[256][128];
+#endif
 
 static int tx_dma = -1;
 static int rx_dma = -1;
@@ -179,7 +183,8 @@ static void send_init(int out_pin)
 	pio_sm_set_enabled(pio1, 2, true);
 }
 
-inline static __unused int lookup_mixer(uint8_t a, uint8_t b)
+#if SPEED < 3
+inline static int lookup_mixer(uint8_t a, uint8_t b)
 {
 	if (b & 0x80)
 		return -mixer[a][(~b) & 0x7f];
@@ -249,6 +254,7 @@ static void generate_mixer(void)
 		for (int j = 0; j < 128; j++)
 			mixer[i][j] = mix(i, j);
 }
+#endif
 
 static float lo_freq_init(float req_freq)
 {
@@ -283,36 +289,50 @@ static float lo_freq_init(float req_freq)
 
 inline static __unused int cheap_atan2(int y, int x)
 {
-	static const int deg[2][2] = { { 192, 0 }, { 128, 64 } };
-	return deg[y < 0][x < 0];
-}
-
-inline static __unused int imaskmod(int x, int mask)
-{
-	return (x < 0) ? -((-x) & mask) : x & mask;
+	if (y > 0) {
+		if (x > 0) {
+			if (y > x)
+				return 16 << 24;
+			return 0;
+		} else {
+			if (-x > y)
+				return 48 << 24;
+			return 32 << 24;
+		}
+	} else {
+		if (x < 0) {
+			if (y < x)
+				return 80 << 24;
+			return 64 << 24;
+		} else {
+			if (x > -y)
+				return 112 << 24;
+			return 96 << 24;
+		}
+	}
 }
 
 inline static __unused int cheap_angle_diff(int angle1, int angle2)
 {
 	int diff = angle2 - angle1;
 
-	diff = imaskmod(diff, 255);
+	if (diff > INT_MAX / 2)
+		return diff - INT_MAX;
 
-	if (diff > 128)
-		return diff - 256;
-
-	if (diff < -128)
-		return diff + 256;
+	if (diff < INT_MIN / 2)
+		return diff + INT_MAX;
 
 	return diff;
 }
 
-inline static __unused unsigned popcount(unsigned v)
+#if SPEED == 3
+inline static unsigned popcount(unsigned v)
 {
 	v = v - ((v >> 1) & 0x55555555);
 	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
 	return (((v + (v >> 4)) & 0x0f0f0f0f) * 0x01010101) >> 24;
 }
+#endif
 
 #define NPOLE 3
 #define NZERO 3
@@ -406,10 +426,12 @@ static void rf_rx(void)
 			   (0 << SIO_INTERP0_CTRL_LANE1_SHIFT_LSB);
 #endif
 
+#if SPEED < 3
 	interp1->ctrl[0] = interp0->ctrl[0];
 	interp1->ctrl[1] = interp0->ctrl[1];
+#endif
 
-	int prevQ = 0;
+	int prevI = 0, prevQ = 0;
 	int period = 0;
 	int frequency = 0;
 	int stride = 0;
@@ -417,7 +439,10 @@ static void rf_rx(void)
 	int delta_watermark = 0;
 	unsigned prev_transfers = 0;
 
-	int angle = 0;
+	int prev_angle = 0;
+	int last_angle_delta = 0;
+	int angle_stride = 0;
+	int rotation = 0;
 
 	while (true) {
 		int I = 0, Q = 0;
@@ -580,18 +605,34 @@ static void rf_rx(void)
 		Q = applyfilter(Q, xvQ, yvQ);
 #endif
 
-		if ((Q >= 0) && (prevQ < 0)) {
-			period = (31 * period + stride) / 32;
+		if ((Q < 0) ^ (prevQ < 0)) {
+			stride *= ((I < 0) ^ (Q < 0)) ? 1 : -1;
+			period = (63 * period + stride) / 64;
 			frequency = CLK_SYS_HZ / ((period >> 3) * delta_watermark);
-			frequency *= (I < 0) ? 1 : -1;
+			stride = 0;
+		} else if ((I < 0) ^ (prevI < 0)) {
+			stride *= ((I < 0) ^ (Q < 0)) ? -1 : 1;
+			period = (63 * period + stride) / 64;
+			frequency = CLK_SYS_HZ / ((period >> 3) * delta_watermark);
 			stride = 0;
 		} else {
-			stride += 256;
+			stride += 1024;
 		}
 
+		prevI = I;
 		prevQ = Q;
 
-		angle = (angle * 7 + cheap_angle_diff(angle, cheap_atan2(I, Q))) / 8;
+		int angle = cheap_atan2(I, Q);
+		int angle_delta = cheap_angle_diff(angle, prev_angle);
+		prev_angle = angle;
+
+		if (angle_delta) {
+			rotation = (rotation * 31 + ((last_angle_delta / angle_stride) >> 16)) / 32;
+			last_angle_delta = angle_delta;
+			angle_stride = 1;
+		} else {
+			angle_stride++;
+		}
 
 		unsigned ssi = I * I + Q * Q;
 		const unsigned alpha = RSSI_ALPHA;
@@ -603,7 +644,7 @@ static void rf_rx(void)
 		status.rssi_raw = assi2 / 16;
 		status.frequency = frequency;
 		status.sample_rate = CLK_SYS_HZ / (delta_watermark * 32);
-		status.angle = angle;
+		status.angle = rotation << 16;
 		status.I = I;
 		status.Q = Q;
 		status.mtime = time_us_32();
@@ -724,14 +765,17 @@ static void command(const char *cmd)
 
 			float rssi_rel = (float)st.rssi_raw / (float)st.rssi_max;
 
-			printf("%5.1f dB (%4u) [%5u %+6i] %+4.0f ", 10.0f * log10f(rssi_rel),
-			       (unsigned)sqrt(st.rssi_raw), st.sample_rate, st.frequency,
-			       360.0f * st.angle / 256.0f);
+			printf("%5.1f dB (%4u) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
+			       (unsigned)sqrt(st.rssi_raw), st.sample_rate,
+			       (abs(st.frequency) > (int)(st.sample_rate / 2)) ? 0 : st.frequency,
+			       180.0f * st.angle / (float)INT_MAX);
 
 			plot_IQ(st.I, st.Q);
 			puts("");
 
-			sleep_us(16666);
+#if SLEEP_US
+			sleep_us(SLEEP_US);
+#endif
 		}
 
 		return;
@@ -766,7 +810,7 @@ static void command(const char *cmd)
 
 int main()
 {
-	vreg_set_voltage(VREG_VOLTAGE_1_30);
+	vreg_set_voltage(VREG_VOLTAGE_MAX);
 	set_sys_clock_khz(CLK_SYS_HZ / KHZ, true);
 	clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, CLK_SYS_HZ,
 			CLK_SYS_HZ);
@@ -786,8 +830,10 @@ int main()
 	printf("\nPuppet Online!\n");
 	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / 1000000.0);
 
+#if SPEED < 3
 	printf("Generating mixer lookup table...\n");
 	generate_mixer();
+#endif
 
 	static char cmd[83];
 	int cmdlen = 0;
