@@ -77,7 +77,6 @@ static void bias_init(int in_pin, int out_pin)
 	gpio_disable_pulls(in_pin);
 	gpio_disable_pulls(out_pin);
 
-	pio_gpio_init(pio1, in_pin);
 	pio_gpio_init(pio1, out_pin);
 
 	gpio_set_input_hysteresis_enabled(in_pin, false);
@@ -105,7 +104,7 @@ static void bias_init(int in_pin, int out_pin)
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, 0, 0);
-	sm_config_set_clkdiv_int_frac(&pc, 1, 127);
+	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
 	pio_sm_init(pio1, 0, 0, &pc);
 
 	pio_sm_set_consecutive_pindirs(pio1, 0, out_pin, 1, GPIO_OUT);
@@ -116,7 +115,6 @@ static void bias_init(int in_pin, int out_pin)
 static void watch_init(int in_pin)
 {
 	gpio_disable_pulls(in_pin);
-	pio_gpio_init(pio1, in_pin);
 
 	gpio_set_input_hysteresis_enabled(in_pin, false);
 
@@ -270,13 +268,11 @@ static float lo_freq_init(float req_freq)
 		unsigned bcos = 0;
 
 		for (int j = 0; j < 32; j++) {
-			int nudge = rand() % step - step / 2;
-
-			bcos |= (acos + nudge) >> 31;
+			bcos |= acos >> 31;
 			bcos <<= 1;
 			acos += step;
 
-			bsin |= (asin + nudge) >> 31;
+			bsin |= asin >> 31;
 			bsin <<= 1;
 			asin += step;
 		}
