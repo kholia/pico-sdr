@@ -43,6 +43,7 @@
 #define HPF_ALPHA 2   /* 2 */
 #define IIR_ON 0
 #define SPEED 3
+#define PRIME_DELTA 1
 
 #define SLEEP_US 16666
 
@@ -373,6 +374,22 @@ inline static __unused float angle_diff(float angle1, float angle2)
 	return diff;
 }
 
+static __unused bool is_prime_or_one(int n)
+{
+	if (n == 1 || n == 2 || n == 3)
+		return true;
+
+	if (n <= 1 || n % 2 == 0 || n % 3 == 0)
+		return false;
+
+	for (int i = 5; i * i <= n; i += 6) {
+		if (n % i == 0 || n % (i + 2) == 0)
+			return false;
+	}
+
+	return true;
+}
+
 static void rf_rx(void)
 {
 	unsigned assi0 = 0, assi1 = 0, assi2 = 0;
@@ -455,9 +472,15 @@ static void rf_rx(void)
 		int acceptable_deviation = delta_watermark / 16 + 1;
 
 		if (delta < (delta_watermark - acceptable_deviation)) {
-			delta_watermark--;
+#if PRIME_DELTA
+			while (!is_prime_or_one(--delta_watermark))
+				;
+#endif
 		} else if (delta > (delta_watermark + acceptable_deviation)) {
-			delta_watermark++;
+#if PRIME_DELTA
+			while (!is_prime_or_one(++delta_watermark))
+				;
+#endif
 		}
 
 		while (delta < delta_watermark) {
