@@ -34,7 +34,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#define CLK_SYS_HZ (250 * MHZ)
+#define CLK_SYS_HZ (264 * MHZ)
 
 #define EXTRA_BITS 4
 #define NUM_SAMPLES 32
@@ -260,25 +260,44 @@ static float lo_freq_init(float req_freq)
 	const float step_hz = (float)CLK_SYS_HZ / (LO_WORDS * 32);
 	float freq = roundf(req_freq / step_hz) * step_hz;
 
-	unsigned step = UINT_MAX / (float)CLK_SYS_HZ * freq;
-	unsigned acos = UINT_MAX / 4;
-	unsigned asin = 0, bsin = 0;
+	unsigned step = (float)UINT_MAX / (float)CLK_SYS_HZ * freq;
+	unsigned sin_acc = 0;
+	unsigned cos_acc = UINT_MAX / 4;
+	unsigned sin_err = 0;
+	unsigned cos_err = 0;
+
+	int prev_sin_bit = 0;
+	int prev_cos_bit = 1;
 
 	for (int i = 0; i < LO_WORDS; i++) {
-		unsigned bcos = 0;
+		unsigned bsin = 0, bcos = 0;
 
 		for (int j = 0; j < 32; j++) {
-			bcos |= acos >> 31;
-			bcos <<= 1;
-			acos += step;
-
-			bsin |= asin >> 31;
+			int sin_bit = (sin_acc + sin_err) >> 31;
+			bsin |= sin_bit;
 			bsin <<= 1;
-			asin += step;
+
+			int cos_bit = (cos_acc + cos_err) >> 31;
+			bcos |= cos_bit;
+			bcos <<= 1;
+
+			if (prev_sin_bit != sin_bit) {
+				sin_err = (sin_acc + sin_err) & 0x7fffffff;
+			}
+
+			if (prev_cos_bit != cos_bit) {
+				cos_err = (cos_acc + cos_err) & 0x7fffffff;
+			}
+
+			prev_sin_bit = sin_bit;
+			prev_cos_bit = cos_bit;
+
+			sin_acc += step;
+			cos_acc += step;
 		}
 
-		lo_cos[i] = bcos;
 		lo_sin[i] = bsin;
+		lo_cos[i] = bcos;
 	}
 
 	return freq;
@@ -748,7 +767,7 @@ static void command(const char *cmd)
 	if (3 == sscanf(cmd, " rx %i %f %[\a]", &n, &f, tmp)) {
 		watch_init(n);
 		float actual = lo_freq_init(f);
-		printf("actual frequency = %f\n", actual);
+		printf("actual frequency = %10.6f Hz\n", actual / MHZ);
 
 		dma_channel_config dma_conf = dma_channel_get_default_config(rx_dma);
 		channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
@@ -811,7 +830,7 @@ static void command(const char *cmd)
 
 		send_init(n);
 		float actual = lo_freq_init(f);
-		printf("actual frequency = %f\n", actual);
+		printf("actual frequency = %10.6f MHz\n", actual / MHZ);
 
 		dma_channel_config dma_conf = dma_channel_get_default_config(tx_dma);
 		channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
@@ -847,7 +866,7 @@ int main()
 	rx_dma = dma_claim_unused_channel(true);
 
 	printf("\nPuppet Online!\n");
-	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / 1000000.0);
+	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / MHZ);
 
 #if SPEED < 3
 	printf("Generating mixer lookup table...\n");
