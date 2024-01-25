@@ -34,7 +34,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#define CLK_SYS_HZ (264 * MHZ)
+#define CLK_SYS_HZ (250 * MHZ)
 
 #define EXTRA_BITS 4
 #define NUM_SAMPLES 32
