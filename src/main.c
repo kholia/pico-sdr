@@ -426,7 +426,8 @@ static void rf_rx(void)
 	int frequency = 0;
 	int stride = 0;
 
-	int delta_watermark = 0;
+	int delta_avg = 1;
+	int prev_delta_netto = 0;
 	unsigned prev_transfers = 0;
 
 	int prev_angle = 0;
@@ -452,23 +453,23 @@ static void rf_rx(void)
 			dma_channel_start(rx_dma);
 
 		int delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
+		delta_avg = (delta_avg * 1023 + delta * 1024) / 1024;
+		int delta_netto = delta_avg / 1024;
 
-		int acceptable_deviation = delta_watermark / 32 + 1;
-
-		if (delta < (delta_watermark - acceptable_deviation)) {
-			delta_watermark--;
-		} else if (delta > (delta_watermark + acceptable_deviation)) {
-			delta_watermark++;
+		if (delta_netto == (prev_delta_netto - 1)) {
+			delta_netto = prev_delta_netto;
+		} else {
+			prev_delta_netto = delta_netto;
 		}
 
-		while (delta < delta_watermark) {
+		while (delta < delta_netto) {
 			if (!dma_channel_is_busy(rx_dma))
 				dma_channel_start(rx_dma);
 
 			delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
 		}
 
-		prev_transfers += delta_watermark;
+		prev_transfers += delta_netto;
 		unsigned pos = (prev_transfers - NUM_SAMPLES - 2) & (LO_WORDS - 1);
 
 #if SPEED == 1
@@ -601,12 +602,12 @@ static void rf_rx(void)
 		if ((Q < 0) ^ (prevQ < 0)) {
 			stride *= ((I < 0) ^ (Q < 0)) ? 1 : -1;
 			period = (63 * period + stride) / 64;
-			frequency = CLK_SYS_HZ / ((period >> 3) * delta_watermark);
+			frequency = CLK_SYS_HZ / ((period >> 3) * delta_netto);
 			stride = 0;
 		} else if ((I < 0) ^ (prevI < 0)) {
 			stride *= ((I < 0) ^ (Q < 0)) ? -1 : 1;
 			period = (63 * period + stride) / 64;
-			frequency = CLK_SYS_HZ / ((period >> 3) * delta_watermark);
+			frequency = CLK_SYS_HZ / ((period >> 3) * delta_netto);
 			stride = 0;
 		} else {
 			stride += 1024;
@@ -636,7 +637,7 @@ static void rf_rx(void)
 
 		status.rssi_raw = assi2 / 16;
 		status.frequency = frequency;
-		status.sample_rate = CLK_SYS_HZ / (delta_watermark * 32);
+		status.sample_rate = CLK_SYS_HZ / (delta_netto * 32);
 		status.angle = rotation << 16;
 		status.I = I;
 		status.Q = Q;
