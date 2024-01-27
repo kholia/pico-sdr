@@ -453,8 +453,8 @@ static void rf_rx(void)
 			dma_channel_start(rx_dma);
 
 		int delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
-		delta_avg = (delta_avg * 1023 + delta * 1024) / 1024;
-		int delta_netto = delta_avg / 1024;
+		delta_avg = (delta_avg * 1023 + delta * 256) / 1024;
+		int delta_netto = delta_avg / 256;
 
 		if (delta_netto == (prev_delta_netto - 1)) {
 			delta_netto = prev_delta_netto;
@@ -762,8 +762,8 @@ static void command(const char *cmd)
 
 			float rssi_rel = st.rssi_raw / st.rssi_max;
 
-			printf("%5.1f dB (%4u) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
-			       (unsigned)sqrt(st.rssi_raw), st.sample_rate,
+			printf("%5.1f dB (%5.0f) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
+			       sqrtf(st.rssi_raw), st.sample_rate,
 			       (abs(st.frequency) > (int)(st.sample_rate / 2)) ? 0 : st.frequency,
 			       180.0f * st.angle / (float)INT_MAX);
 
