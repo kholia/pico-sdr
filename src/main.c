@@ -62,8 +62,8 @@ static int rx_dma = -1;
 
 static volatile struct status {
 	unsigned mtime;
-	unsigned rssi_raw;
-	unsigned rssi_max;
+	float rssi_raw;
+	float rssi_max;
 	unsigned sample_rate;
 	int frequency;
 	int angle;
@@ -368,12 +368,12 @@ static __unused bool is_prime_or_one(int n)
 
 static void rf_rx(void)
 {
-	unsigned assi0 = 0, assi1 = 0, assi2 = 0;
+	uint64_t assi0 = 0, assi1 = 0, assi2 = 0;
 
-	status.rssi_max = pow(2.0f * 0.707f * 127.0f * (1 << EXTRA_BITS), 2.0f);
+	status.rssi_max = 0.5f * powf(127.5f * (1 << EXTRA_BITS), 2.0f);
 
 #if HPF_ALPHA
-	int hpI = 0, hpQ = 0;
+	int64_t hpI = 0, hpQ = 0;
 #endif
 
 #if LPF_SAMPLES
@@ -549,27 +549,25 @@ static void rf_rx(void)
 		I -= 16 * NUM_SAMPLES;
 		Q -= 16 * NUM_SAMPLES;
 
-#if EXTRA_BITS
+#if SPEED == 3
+		/* Normalize to given number of bits. */
+		I = (I * ((1 << (7 + EXTRA_BITS)) - 1)) / 16;
+		Q = (Q * ((1 << (7 + EXTRA_BITS)) - 1)) / 16;
+#else
 		I <<= EXTRA_BITS;
 		Q <<= EXTRA_BITS;
-#endif
-
-#if SPEED == 3
-		/* Normalize to 8 bits. */
-		I = (I * 127) / 16;
-		Q = (Q * 127) / 16;
 #endif
 		I /= NUM_SAMPLES;
 		Q /= NUM_SAMPLES;
 
 #if HPF_ALPHA
-		int tmpI = I * 256;
-		I -= hpI / 256;
-		hpI = (hpI * ((1 << 10) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 10;
+		int64_t tmpI = (int64_t)I << 16;
+		I -= hpI >> 16;
+		hpI = (hpI * ((1 << 16) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 16;
 
-		int tmpQ = Q * 256;
-		Q -= hpQ / 256;
-		hpQ = (hpQ * ((1 << 10) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 10;
+		int64_t tmpQ = (int64_t)Q << 16;
+		Q -= hpQ >> 16;
+		hpQ = (hpQ * ((1 << 16) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 16;
 #endif
 
 #if LPF_SAMPLES
@@ -631,14 +629,14 @@ static void rf_rx(void)
 			angle_stride++;
 		}
 
-		unsigned ssi = I * I + Q * Q;
-		const unsigned alpha = RSSI_ALPHA;
+		uint64_t ssi = (uint64_t)I * (uint64_t)I + (uint64_t)Q * (uint64_t)Q;
+		const uint64_t alpha = RSSI_ALPHA;
 
-		assi0 = (assi0 * (256 - alpha) + ssi * 16 * alpha) / 256;
+		assi0 = (assi0 * (256 - alpha) + (ssi << 16) * alpha) / 256;
 		assi1 = (assi1 * (256 - alpha) + assi0 * alpha) / 256;
 		assi2 = (assi2 * (256 - alpha) + assi1 * alpha) / 256;
 
-		status.rssi_raw = assi2 / 16;
+		status.rssi_raw = assi2 >> 16;
 		status.frequency = frequency;
 		status.sample_rate = CLK_SYS_HZ / (delta_netto * 32);
 		status.angle = rotation << 16;
@@ -762,7 +760,7 @@ static void command(const char *cmd)
 
 			last = st.mtime;
 
-			float rssi_rel = (float)st.rssi_raw / (float)st.rssi_max;
+			float rssi_rel = st.rssi_raw / st.rssi_max;
 
 			printf("%5.1f dB (%4u) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
 			       (unsigned)sqrt(st.rssi_raw), st.sample_rate,
