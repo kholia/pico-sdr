@@ -40,7 +40,7 @@
 #define NUM_SAMPLES 32
 #define RSSI_ALPHA 1
 #define LPF_SAMPLES 8 /* 8 */
-#define HPF_ALPHA 1   /* 1 */
+#define HPF_ALPHA 5   /* 5 */
 #define SPEED 3
 
 #define SLEEP_US 16666
