@@ -239,12 +239,14 @@ static int8_t mix(uint8_t a, uint8_t b)
 #if SPEED == 1
 	for (int i = 4; i < 12; i++)
 		accum += ab[i];
+
+	return accum >> 3;
 #else
 	for (int i = 0; i < 16; i++)
 		accum += ab[i];
-#endif
 
-	return accum >> 3;
+	return accum >> 4;
+#endif
 }
 
 static void generate_mixer(void)
