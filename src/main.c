@@ -72,6 +72,8 @@ static volatile struct status {
 	int I, Q;
 } status;
 
+#define PLEASE_DIE 0xd1e
+
 static void bias_init(int in_pin, int out_pin)
 {
 	gpio_disable_pulls(in_pin);
@@ -426,6 +428,11 @@ static void rf_rx(void)
 	int lpIavg3 = 0, lpQavg3 = 0;
 
 	int lpIidx = 0, lpQidx = 0;
+
+	for (int i = 0; i < LPF_SAMPLES; i++) {
+		lpIh1[i] = lpIh2[i] = lpIh3[i] = 0;
+		lpQh1[i] = lpQh2[i] = lpQh3[i] = 0;
+	}
 #endif
 
 #if IIR_ON
@@ -477,6 +484,17 @@ static void rf_rx(void)
 	int rotation = 0;
 
 	while (true) {
+		uint32_t msg = 0;
+
+		if (multicore_fifo_rvalid()) {
+			msg = multicore_fifo_pop_blocking();
+
+			if (PLEASE_DIE == msg) {
+				multicore_fifo_push_blocking(0);
+				return;
+			}
+		}
+
 		int I = 0, Q = 0;
 
 		if (!dma_channel_is_busy(rx_dma))
@@ -513,8 +531,6 @@ static void rf_rx(void)
 		unsigned prev_cos_word = 0;
 		unsigned prev_sin_word = 0;
 #endif
-
-		I = Q = 0;
 
 		for (int k = 0; k < NUM_SAMPLES; k++) {
 			unsigned rx_word = rx_buf[pos];
@@ -591,20 +607,19 @@ static void rf_rx(void)
 
 #if SPEED == 3
 		/* Normalize to 8 bits. */
-		I = (I * 255) / 16;
-		Q = (Q * 255) / 16;
+		I = (I * 127) / 16;
+		Q = (Q * 127) / 16;
 #endif
-
 		I /= NUM_SAMPLES;
 		Q /= NUM_SAMPLES;
 
 #if HPF_ALPHA
-		int tmpI = I * 256;
-		I -= hpI / 256;
+		int tmpI = I * 64;
+		I -= hpI / 64;
 		hpI = (hpI * ((1 << 12) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 12;
 
-		int tmpQ = Q * 256;
-		Q -= hpQ / 256;
+		int tmpQ = Q * 64;
+		Q -= hpQ / 64;
 		hpQ = (hpQ * ((1 << 12) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 12;
 #endif
 
@@ -786,6 +801,8 @@ static void command(const char *cmd)
 			int c = getchar_timeout_us(0);
 
 			if (13 == c) {
+				multicore_fifo_push_blocking(PLEASE_DIE);
+				multicore_fifo_pop_blocking();
 				multicore_reset_core1();
 				dma_channel_abort(rx_dma);
 				dma_channel_cleanup(rx_dma);
