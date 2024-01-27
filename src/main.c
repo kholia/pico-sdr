@@ -486,8 +486,8 @@ static void rf_rx(void)
 			pos = (pos + 1) & (LO_WORDS - 1);
 
 #if SPEED == 3
-			I += popcount(rx_word & cos_word) - popcount(rx_word & ~cos_word);
-			Q += popcount(rx_word & sin_word) - popcount(rx_word & ~sin_word);
+			I += popcount(rx_word ^ cos_word);
+			Q += popcount(rx_word ^ sin_word);
 #elif SPEED == 2
 			interp0->accum[0] = rx_word;
 			interp0->accum[1] = rx_word;
@@ -545,6 +545,9 @@ static void rf_rx(void)
 			prev_rx_word = interp0->pop[1];
 #endif
 		}
+
+		I -= 16 * NUM_SAMPLES;
+		Q -= 16 * NUM_SAMPLES;
 
 #if EXTRA_BITS
 		I <<= EXTRA_BITS;
