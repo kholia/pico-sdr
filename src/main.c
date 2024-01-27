@@ -508,11 +508,15 @@ static void rf_rx(void)
 #if PRIME_DELTA
 			while (!is_prime_or_one(--delta_watermark))
 				;
+#else
+			delta_watermark--;
 #endif
 		} else if (delta > (delta_watermark + acceptable_deviation)) {
 #if PRIME_DELTA
 			while (!is_prime_or_one(++delta_watermark))
 				;
+#else
+			delta_watermark++;
 #endif
 		}
 
