@@ -230,7 +230,7 @@ static int8_t mix(uint8_t a, uint8_t b)
 	lpf(bb, 16);
 
 	for (int i = 0; i < 16; i++)
-		ab[i] = ((int)ab[i] * (int)bb[i]) >> 7;
+		ab[i] = ((int)ab[i] * (int)bb[i]) / 127;
 
 	lpf(ab, 16);
 
