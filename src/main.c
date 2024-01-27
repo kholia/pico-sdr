@@ -41,9 +41,7 @@
 #define RSSI_ALPHA 1
 #define LPF_SAMPLES 8 /* 8 */
 #define HPF_ALPHA 1   /* 1 */
-#define IIR_ON 0
 #define SPEED 3
-#define PRIME_DELTA 1
 
 #define SLEEP_US 16666
 
@@ -343,52 +341,11 @@ inline static __unused int cheap_angle_diff(int angle1, int angle2)
 	return diff;
 }
 
-#if SPEED == 3
-inline static unsigned popcount(unsigned v)
+inline static __unused unsigned popcount(unsigned v)
 {
 	v = v - ((v >> 1) & 0x55555555);
 	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
 	return (((v + (v >> 4)) & 0x0f0f0f0f) * 0x01010101) >> 24;
-}
-#endif
-
-#define NPOLE 3
-#define NZERO 3
-float acoeff[] = { -0.16915568299951372, 0.8087276367484724, -1.3271950516294135, 1 };
-float bcoeff[] = { 1, 3, 3, 1 };
-float gain = 25.610088152223362;
-
-inline static __unused float applyfilter(float v, float *xv, float *yv)
-{
-	int i;
-	float out = 0;
-	for (i = 0; i < NZERO; i++) {
-		xv[i] = xv[i + 1];
-	}
-	xv[NZERO] = v / gain;
-	for (i = 0; i < NPOLE; i++) {
-		yv[i] = yv[i + 1];
-	}
-	for (i = 0; i <= NZERO; i++) {
-		out += xv[i] * bcoeff[i];
-	}
-	for (i = 0; i < NPOLE; i++) {
-		out -= yv[i] * acoeff[i];
-	}
-	yv[NPOLE] = out;
-	return out;
-}
-
-inline static __unused float angle_diff(float angle1, float angle2)
-{
-	float diff = fmod(angle2 - angle1, 360.0f);
-
-	if (diff > 180.0f)
-		diff -= 360.0f;
-	else if (diff < -180.0f)
-		diff += 360.0f;
-
-	return diff;
 }
 
 static __unused bool is_prime_or_one(int n)
@@ -433,14 +390,6 @@ static void rf_rx(void)
 		lpIh1[i] = lpIh2[i] = lpIh3[i] = 0;
 		lpQh1[i] = lpQh2[i] = lpQh3[i] = 0;
 	}
-#endif
-
-#if IIR_ON
-	float xvI[] = { 0, 0, 0, 0 };
-	float yvI[] = { 0, 0, 0, 0 };
-
-	float xvQ[] = { 0, 0, 0, 0 };
-	float yvQ[] = { 0, 0, 0, 0 };
 #endif
 
 #if SPEED == 2
@@ -502,22 +451,12 @@ static void rf_rx(void)
 
 		int delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
 
-		int acceptable_deviation = delta_watermark / 16 + 1;
+		int acceptable_deviation = delta_watermark / 32 + 1;
 
 		if (delta < (delta_watermark - acceptable_deviation)) {
-#if PRIME_DELTA
-			while (!is_prime_or_one(--delta_watermark))
-				;
-#else
 			delta_watermark--;
-#endif
 		} else if (delta > (delta_watermark + acceptable_deviation)) {
-#if PRIME_DELTA
-			while (!is_prime_or_one(++delta_watermark))
-				;
-#else
 			delta_watermark++;
-#endif
 		}
 
 		while (delta < delta_watermark) {
@@ -655,11 +594,6 @@ static void rf_rx(void)
 			lpQidx = 0;
 
 		Q = lpQavg3 / (LPF_SAMPLES * LPF_SAMPLES * LPF_SAMPLES);
-#endif
-
-#if IIR_ON
-		I = applyfilter(I, xvI, yvI);
-		Q = applyfilter(Q, xvQ, yvQ);
 #endif
 
 		if ((Q < 0) ^ (prevQ < 0)) {
