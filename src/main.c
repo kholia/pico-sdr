@@ -40,7 +40,7 @@
 #define NUM_SAMPLES 32
 #define RSSI_ALPHA 1
 #define LPF_SAMPLES 8 /* 8 */
-#define HPF_ALPHA 2   /* 2 */
+#define HPF_ALPHA 1   /* 1 */
 #define IIR_ON 0
 #define SPEED 3
 #define PRIME_DELTA 1
@@ -618,13 +618,13 @@ static void rf_rx(void)
 		Q /= NUM_SAMPLES;
 
 #if HPF_ALPHA
-		int tmpI = I * 64;
-		I -= hpI / 64;
-		hpI = (hpI * ((1 << 12) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 12;
+		int tmpI = I * 256;
+		I -= hpI / 256;
+		hpI = (hpI * ((1 << 10) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 10;
 
-		int tmpQ = Q * 64;
-		Q -= hpQ / 64;
-		hpQ = (hpQ * ((1 << 12) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 12;
+		int tmpQ = Q * 256;
+		Q -= hpQ / 256;
+		hpQ = (hpQ * ((1 << 10) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 10;
 #endif
 
 #if LPF_SAMPLES
