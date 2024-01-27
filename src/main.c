@@ -411,7 +411,7 @@ static void rf_rx(void)
 {
 	unsigned assi0 = 0, assi1 = 0, assi2 = 0;
 
-	status.rssi_max = pow(127.5f * 8.0f * (1 << EXTRA_BITS), 2.0f);
+	status.rssi_max = pow(2.0f * 0.707f * 127.0f * (1 << EXTRA_BITS), 2.0f);
 
 #if HPF_ALPHA
 	int hpI = 0, hpQ = 0;
