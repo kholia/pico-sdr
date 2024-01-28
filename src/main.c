@@ -689,7 +689,7 @@ static void command(const char *cmd)
 		puts("bias I O         - output negated I to O");
 		puts("rx N FREQ        - receive on pin N");
 		puts("tx N FREQ        - transmit on pin N");
-		puts("sweep N F G MS   - sweep from F to G with MS at step");
+		puts("sweep N F G S    - sweep from F to G with given step");
 		puts("noise N          - transmit random noise");
 		return;
 	}
@@ -820,14 +820,13 @@ static void command(const char *cmd)
 		channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, true));
 		dma_channel_configure(tx_dma, &dma_conf, &pio1->txf[2], lo_cos, UINT_MAX, true);
 
-		for (int i = 0; i < steps; i++) {
+		for (int i = 0; i < steps; i += x) {
 			int c = getchar_timeout_us(0);
 			if ('\n' == c || '\r' == c)
 				break;
 
 			float actual = lo_freq_init(start + i * step_hz);
 			printf("frequency = %10.6f MHz\n", actual / MHZ);
-			sleep_ms(x);
 		}
 
 		dma_channel_abort(tx_dma);
