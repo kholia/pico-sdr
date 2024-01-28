@@ -36,11 +36,11 @@
 
 #define CLK_SYS_HZ (250 * MHZ)
 
-#define EXTRA_BITS 4
-#define NUM_SAMPLES 32
+#define EXTRA_BITS 8
+#define NUM_SAMPLES 128
 #define RSSI_ALPHA 1
-#define LPF_SAMPLES 8 /* 8 */
-#define HPF_ALPHA 5   /* 5 */
+#define LPF_SAMPLES 4
+#define HPF_ALPHA 5
 #define SPEED 3
 
 #define SLEEP_US 16666
