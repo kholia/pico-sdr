@@ -263,39 +263,27 @@ static float lo_freq_init(float req_freq)
 	float freq = roundf(req_freq / step_hz) * step_hz;
 
 	unsigned step = (float)UINT_MAX / (float)CLK_SYS_HZ * freq;
-	unsigned sin_acc = 0;
-	unsigned cos_acc = UINT_MAX / 4;
-	unsigned sin_err = 0;
-	unsigned cos_err = 0;
 
-	int prev_sin_bit = 0;
-	int prev_cos_bit = 1;
+	interp0->ctrl[0] = (31 << SIO_INTERP0_CTRL_LANE0_MASK_MSB_LSB) |
+			   (0 << SIO_INTERP0_CTRL_LANE0_MASK_LSB_LSB) |
+			   (0 << SIO_INTERP0_CTRL_LANE0_SHIFT_LSB);
+	interp0->ctrl[1] = interp0->ctrl[0];
+
+	interp0->base[0] = step;
+	interp0->base[1] = step;
+	interp0->accum[1] = UINT_MAX / 4;
 
 	for (int i = 0; i < LO_WORDS; i++) {
 		unsigned bsin = 0, bcos = 0;
 
 		for (int j = 0; j < 32; j++) {
-			int sin_bit = (sin_acc + sin_err) >> 31;
+			int sin_bit = interp0->peek[0] >> 31;
 			bsin |= sin_bit;
 			bsin <<= 1;
 
-			int cos_bit = (cos_acc + cos_err) >> 31;
+			int cos_bit = interp0->pop[1] >> 31;
 			bcos |= cos_bit;
 			bcos <<= 1;
-
-			if (prev_sin_bit != sin_bit) {
-				sin_err = (sin_acc + sin_err) & 0x7fffffff;
-			}
-
-			if (prev_cos_bit != cos_bit) {
-				cos_err = (cos_acc + cos_err) & 0x7fffffff;
-			}
-
-			prev_sin_bit = sin_bit;
-			prev_cos_bit = cos_bit;
-
-			sin_acc += step;
-			cos_acc += step;
 		}
 
 		lo_sin[i] = bsin;
@@ -693,7 +681,7 @@ static void command(const char *cmd)
 {
 	static char tmp[83];
 	int n, x;
-	float f;
+	float f, g;
 
 	if (1 == sscanf(cmd, " help %[\a]", tmp)) {
 		puts("help             - this help");
@@ -701,6 +689,8 @@ static void command(const char *cmd)
 		puts("bias I O         - output negated I to O");
 		puts("rx N FREQ        - receive on pin N");
 		puts("tx N FREQ        - transmit on pin N");
+		puts("sweep N F G MS   - sweep from F to G with MS at step");
+		puts("noise N          - transmit random noise");
 		return;
 	}
 
@@ -799,6 +789,77 @@ static void command(const char *cmd)
 		channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, true));
 		dma_channel_configure(tx_dma, &dma_conf, &pio1->txf[2], lo_cos, UINT_MAX, true);
 		puts("started");
+		return;
+	}
+
+	if (5 == sscanf(cmd, " sweep %i %f %f %i %[\a]", &n, &f, &g, &x, tmp)) {
+		dma_channel_abort(tx_dma);
+
+		if (!f || !g) {
+			gpio_init(n);
+			puts("stopped");
+			return;
+		}
+
+		send_init(n);
+
+		const float step_hz = (float)CLK_SYS_HZ / (LO_WORDS * 32);
+		const float start = roundf(f / step_hz) * step_hz;
+		const float stop = roundf(g / step_hz) * step_hz;
+
+		int steps = roundf((stop - start) / step_hz);
+
+		for (int i = 0; i < LO_WORDS; i++)
+			lo_cos[i] = 0;
+
+		dma_channel_config dma_conf = dma_channel_get_default_config(tx_dma);
+		channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
+		channel_config_set_read_increment(&dma_conf, true);
+		channel_config_set_write_increment(&dma_conf, false);
+		channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
+		channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, true));
+		dma_channel_configure(tx_dma, &dma_conf, &pio1->txf[2], lo_cos, UINT_MAX, true);
+
+		for (int i = 0; i < steps; i++) {
+			int c = getchar_timeout_us(0);
+			if ('\n' == c || '\r' == c)
+				break;
+
+			float actual = lo_freq_init(start + i * step_hz);
+			printf("frequency = %10.6f MHz\n", actual / MHZ);
+			sleep_ms(x);
+		}
+
+		dma_channel_abort(tx_dma);
+		return;
+	}
+
+	if (2 == sscanf(cmd, " noise %i %[\a]", &n, tmp)) {
+		send_init(n);
+
+		for (int i = 0; i < LO_WORDS; i++)
+			lo_cos[i] = rand();
+
+		dma_channel_config dma_conf = dma_channel_get_default_config(tx_dma);
+		channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
+		channel_config_set_read_increment(&dma_conf, true);
+		channel_config_set_write_increment(&dma_conf, false);
+		channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
+		channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, true));
+		dma_channel_configure(tx_dma, &dma_conf, &pio1->txf[2], lo_cos, UINT_MAX, true);
+
+		puts("Transmitting noise, press ENTER to stop.");
+
+		while (true) {
+			int c = getchar_timeout_us(0);
+			if ('\n' == c || '\r' == c)
+				break;
+
+			for (int i = 0; i < LO_WORDS; i++)
+				lo_cos[i] = rand();
+		}
+
+		dma_channel_abort(tx_dma);
 		return;
 	}
 
