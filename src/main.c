@@ -752,7 +752,7 @@ static void command(const char *cmd)
 
 			float rssi_rel = st.rssi_raw / st.rssi_max;
 
-			printf("%5.1f dB (%5.0f) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
+			printf("%5.1f dBm (%5.0f) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
 			       sqrtf(st.rssi_raw), st.sample_rate,
 			       (abs(st.frequency) > (int)(st.sample_rate / 2)) ? 0 : st.frequency,
 			       180.0f * st.angle / (float)INT_MAX);
