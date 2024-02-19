@@ -17,6 +17,7 @@
 #include <pico/stdlib.h>
 #include <pico/stdio_usb.h>
 #include <pico/multicore.h>
+#include <pico/util/queue.h>
 
 #include <hardware/clocks.h>
 #include <hardware/dma.h>
@@ -35,17 +36,12 @@
 #include <stdlib.h>
 
 #define CLK_SYS_HZ (250 * MHZ)
+#define CLKDIV_RF 2
+#define CLK_RF_HZ ((unsigned)(CLK_SYS_HZ / CLKDIV_RF))
 
 #define EXTRA_BITS 8
 #define NUM_SAMPLES 128
-#define RSSI_ALPHA 1
-#define LPF_SAMPLES 4
-#define HPF_ALPHA 5
-#define SPEED 3
-
-#define SLEEP_US 16666
-
-#define LED_PIN 25
+#define LPF_SAMPLES 0 /* 4 */
 
 #define LO_BITS_DEPTH 13
 #define LO_WORDS (1 << LO_BITS_DEPTH)
@@ -53,24 +49,16 @@ static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t rx_buf[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
-#if SPEED < 3
-static int8_t mixer[256][128];
-#endif
+#define IQ_BLOCK_LEN 60
+static queue_t rx_queue;
 
 static int tx_dma = -1;
 static int rx_dma = -1;
 
 static volatile struct status {
-	unsigned mtime;
-	float rssi_raw;
-	float rssi_max;
 	unsigned sample_rate;
-	int frequency;
-	int angle;
-	int I, Q;
+	int gap;
 } status;
-
-#define PLEASE_DIE 0xd1e
 
 static void bias_init(int in_pin, int out_pin)
 {
@@ -101,6 +89,8 @@ static void bias_init(int in_pin, int out_pin)
 
 	pio_sm_config pc = pio_get_default_sm_config();
 	sm_config_set_in_pins(&pc, in_pin);
+	sm_config_set_sideset(&pc, 2, false, true);
+	sm_config_set_sideset_pins(&pc, out_pin);
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, 0, 0);
@@ -137,7 +127,7 @@ static void watch_init(int in_pin)
 	pio_sm_config pc = pio_get_default_sm_config();
 	sm_config_set_in_pins(&pc, in_pin);
 	sm_config_set_wrap(&pc, 1, 1);
-	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
+	sm_config_set_clkdiv_int_frac(&pc, CLKDIV_RF, 0);
 	sm_config_set_fifo_join(&pc, PIO_FIFO_JOIN_RX);
 	sm_config_set_in_shift(&pc, false, true, 32);
 	pio_sm_init(pio1, 1, 1, &pc);
@@ -172,7 +162,7 @@ static void send_init(int out_pin)
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, 2, 2);
-	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
+	sm_config_set_clkdiv_int_frac(&pc, CLKDIV_RF, 0);
 	sm_config_set_fifo_join(&pc, PIO_FIFO_JOIN_TX);
 	sm_config_set_out_shift(&pc, false, true, 32);
 	pio_sm_init(pio1, 2, 2, &pc);
@@ -182,87 +172,12 @@ static void send_init(int out_pin)
 	pio_sm_set_enabled(pio1, 2, true);
 }
 
-#if SPEED < 3
-inline static int lookup_mixer(uint8_t a, uint8_t b)
-{
-	if (b & 0x80)
-		return -mixer[a][(~b) & 0x7f];
-
-	return mixer[a][b];
-}
-
-inline static void lpf(int8_t *xs, int len)
-{
-	int p1, p2;
-
-	p2 = p1 = xs[0];
-
-	for (int i = 0; i < len; i++) {
-		int tmp = xs[i];
-		xs[i] = (p1 + p2 + tmp) / 3;
-		p2 = p1, p1 = tmp;
-	}
-
-	p2 = p1 = xs[len - 1];
-
-	for (int i = len - 1; i >= 0; i--) {
-		int tmp = xs[i];
-		xs[i] = (p1 + p2 + tmp) / 3;
-		p2 = p1, p1 = tmp;
-	}
-}
-
-static int8_t mix(uint8_t a, uint8_t b)
-{
-	static int8_t ab[16], bb[16];
-
-	for (int i = 0; i < 8; i++) {
-		ab[i * 2 + 0] = (a >> 7) ? 127 : -127;
-		ab[i * 2 + 1] = ab[i * 2];
-		a <<= 1;
-
-		bb[i * 2 + 0] = (b >> 7) ? 127 : -127;
-		bb[i * 2 + 1] = bb[i * 2];
-		b <<= 1;
-	}
-
-	lpf(ab, 16);
-	lpf(bb, 16);
-
-	for (int i = 0; i < 16; i++)
-		ab[i] = ((int)ab[i] * (int)bb[i]) / 127;
-
-	lpf(ab, 16);
-
-	int accum = 0;
-
-#if SPEED == 1
-	for (int i = 4; i < 12; i++)
-		accum += ab[i];
-
-	return accum >> 3;
-#else
-	for (int i = 0; i < 16; i++)
-		accum += ab[i];
-
-	return accum >> 4;
-#endif
-}
-
-static void generate_mixer(void)
-{
-	for (int i = 0; i < 256; i++)
-		for (int j = 0; j < 128; j++)
-			mixer[i][j] = mix(i, j);
-}
-#endif
-
 static float lo_freq_init(float req_freq)
 {
-	const float step_hz = (float)CLK_SYS_HZ / (LO_WORDS * 32);
+	const float step_hz = (float)CLK_RF_HZ / (LO_WORDS * 32);
 	float freq = roundf(req_freq / step_hz) * step_hz;
 
-	unsigned step = (float)UINT_MAX / (float)CLK_SYS_HZ * freq;
+	unsigned step = (float)UINT_MAX / (float)CLK_RF_HZ * freq;
 
 	interp0->ctrl[0] = (31 << SIO_INTERP0_CTRL_LANE0_MASK_MSB_LSB) |
 			   (0 << SIO_INTERP0_CTRL_LANE0_MASK_LSB_LSB) |
@@ -331,39 +246,25 @@ inline static __unused int cheap_angle_diff(int angle1, int angle2)
 	return diff;
 }
 
-inline static __unused unsigned popcount(unsigned v)
+inline static unsigned popcount(unsigned v)
 {
 	v = v - ((v >> 1) & 0x55555555);
 	v = (v & 0x33333333) + ((v >> 2) & 0x33333333);
 	return (((v + (v >> 4)) & 0x0f0f0f0f) * 0x01010101) >> 24;
 }
 
-static __unused bool is_prime_or_one(int n)
+__noinline static int mix(uint32_t *buf, uint32_t *lo, int len)
 {
-	if (n == 1 || n == 2 || n == 3)
-		return true;
+	int x = 0;
 
-	if (n <= 1 || n % 2 == 0 || n % 3 == 0)
-		return false;
+	for (int k = 0; k < len; k++)
+		x += popcount(buf[k] ^ lo[k]);
 
-	for (int i = 5; i * i <= n; i += 6) {
-		if (n % i == 0 || n % (i + 2) == 0)
-			return false;
-	}
-
-	return true;
+	return x;
 }
 
 static void rf_rx(void)
 {
-	uint64_t assi0 = 0, assi1 = 0, assi2 = 0;
-
-	status.rssi_max = 0.5f * powf(127.5f * (1 << EXTRA_BITS), 2.0f);
-
-#if HPF_ALPHA
-	int64_t hpI = 0, hpQ = 0;
-#endif
-
 #if LPF_SAMPLES
 	static int lpIh1[LPF_SAMPLES], lpQh1[LPF_SAMPLES];
 	int lpIavg1 = 0, lpQavg1 = 0;
@@ -382,181 +283,51 @@ static void rf_rx(void)
 	}
 #endif
 
-#if SPEED == 2
-	interp0->ctrl[0] = (31 << SIO_INTERP0_CTRL_LANE0_MASK_MSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE0_MASK_LSB_LSB) |
-			   (8 << SIO_INTERP0_CTRL_LANE0_SHIFT_LSB);
-
-	interp0->ctrl[1] = SIO_INTERP0_CTRL_LANE0_CROSS_RESULT_BITS |
-			   (7 << SIO_INTERP0_CTRL_LANE1_MASK_MSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE1_MASK_LSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE1_SHIFT_LSB);
-#endif
-
-#if SPEED == 1
-	interp0->ctrl[0] = (31 << SIO_INTERP0_CTRL_LANE0_MASK_MSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE0_MASK_LSB_LSB) |
-			   (4 << SIO_INTERP0_CTRL_LANE0_SHIFT_LSB);
-
-	interp0->ctrl[1] = SIO_INTERP0_CTRL_LANE0_CROSS_RESULT_BITS |
-			   (7 << SIO_INTERP0_CTRL_LANE1_MASK_MSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE1_MASK_LSB_LSB) |
-			   (0 << SIO_INTERP0_CTRL_LANE1_SHIFT_LSB);
-#endif
-
-#if SPEED < 3
-	interp1->ctrl[0] = interp0->ctrl[0];
-	interp1->ctrl[1] = interp0->ctrl[1];
-#endif
-
-	int prevI = 0, prevQ = 0;
-	int period = 0;
-	int frequency = 0;
-	int stride = 0;
-
-	int delta_avg = 1;
-	int prev_delta_netto = 0;
 	unsigned prev_transfers = 0;
 
-	int prev_angle = 0;
-	int last_angle_delta = 0;
-	int angle_stride = 0;
-	int rotation = 0;
+	static int16_t block[IQ_BLOCK_LEN];
+	int block_ptr = 0;
 
 	while (true) {
-		uint32_t msg = 0;
-
-		if (multicore_fifo_rvalid()) {
-			msg = multicore_fifo_pop_blocking();
-
-			if (PLEASE_DIE == msg) {
-				multicore_fifo_push_blocking(0);
-				return;
-			}
-		}
-
-		int I = 0, Q = 0;
-
-		if (!dma_channel_is_busy(rx_dma))
-			dma_channel_start(rx_dma);
-
 		int delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
-		delta_avg = (delta_avg * 1023 + delta * 256) / 1024;
-		int delta_netto = delta_avg / 256;
+		int gap = NUM_SAMPLES - delta;
 
-		if (delta_netto == (prev_delta_netto - 1)) {
-			delta_netto = prev_delta_netto;
-		} else {
-			prev_delta_netto = delta_netto;
-		}
-
-		while (delta < delta_netto) {
-			if (!dma_channel_is_busy(rx_dma))
-				dma_channel_start(rx_dma);
-
+		while (delta < NUM_SAMPLES)
 			delta = ~dma_hw->ch[rx_dma].transfer_count - prev_transfers;
-		}
 
-		prev_transfers += delta_netto;
-		unsigned pos = (prev_transfers - NUM_SAMPLES - 2) & (LO_WORDS - 1);
+		if (gap < 0)
+			prev_transfers += NUM_SAMPLES;
 
-#if SPEED == 1
-		unsigned prev_rx_word = 0;
-		unsigned prev_cos_word = 0;
-		unsigned prev_sin_word = 0;
-#endif
+		unsigned pos = prev_transfers & (LO_WORDS - 1);
+		prev_transfers += NUM_SAMPLES;
 
-		for (int k = 0; k < NUM_SAMPLES; k++) {
-			unsigned rx_word = rx_buf[pos];
-			unsigned cos_word = lo_cos[pos];
-			unsigned sin_word = lo_sin[pos];
+		int I = mix(rx_buf + pos, lo_cos + pos, NUM_SAMPLES);
+		int Q = mix(rx_buf + pos, lo_sin + pos, NUM_SAMPLES);
 
-			pos = (pos + 1) & (LO_WORDS - 1);
+		/*
+		 * Limit our biasing activity to a short period at a time.
+		 * This is sufficient to keep the input biased while limiting
+		 * the interference from biasing to minimum.
+		 */
+		pio_sm_exec(pio1, 0, pio_encode_sideset(2, 3) | pio_encode_nop());
 
-#if SPEED == 3
-			I += popcount(rx_word ^ cos_word);
-			Q += popcount(rx_word ^ sin_word);
-#elif SPEED == 2
-			interp0->accum[0] = rx_word;
-			interp0->accum[1] = rx_word;
-			interp1->accum[0] = cos_word;
-			interp1->accum[1] = cos_word;
-
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-
-			interp0->accum[0] = rx_word;
-			interp0->accum[1] = rx_word;
-			interp1->accum[0] = sin_word;
-			interp1->accum[1] = sin_word;
-
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-#elif SPEED == 1
-			I += lookup_mixer(((prev_rx_word << 4) | (rx_word >> 28)),
-					  ((prev_cos_word << 4) | (cos_word >> 28)));
-
-			Q += lookup_mixer(((prev_rx_word << 4) | (rx_word >> 28)),
-					  ((prev_sin_word << 4) | (sin_word >> 28)));
-
-			interp0->accum[0] = rx_word;
-			interp0->accum[1] = rx_word;
-			interp1->accum[0] = cos_word;
-			interp1->accum[1] = cos_word;
-
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			I += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			prev_cos_word = interp1->pop[1];
-
-			interp0->accum[0] = rx_word;
-			interp0->accum[1] = rx_word;
-			interp1->accum[0] = sin_word;
-			interp1->accum[1] = sin_word;
-
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			Q += lookup_mixer(interp0->pop[1], interp1->pop[1]);
-			prev_sin_word = interp1->pop[1];
-			prev_rx_word = interp0->pop[1];
-#endif
-		}
-
+		/* Remove the large DC bias. */
 		I -= 16 * NUM_SAMPLES;
 		Q -= 16 * NUM_SAMPLES;
 
-#if SPEED == 3
+		/* Not sure why, but this removes a small DC bias. */
+		I -= NUM_SAMPLES / 16;
+		Q -= NUM_SAMPLES / 16;
+
 		/* Normalize to given number of bits. */
 		I = (I * ((1 << (7 + EXTRA_BITS)) - 1)) / 16;
 		Q = (Q * ((1 << (7 + EXTRA_BITS)) - 1)) / 16;
-#else
-		I <<= EXTRA_BITS;
-		Q <<= EXTRA_BITS;
-#endif
+
 		I /= NUM_SAMPLES;
 		Q /= NUM_SAMPLES;
 
-#if HPF_ALPHA
-		int64_t tmpI = (int64_t)I << 16;
-		I -= hpI >> 16;
-		hpI = (hpI * ((1 << 16) - HPF_ALPHA) + tmpI * HPF_ALPHA) >> 16;
-
-		int64_t tmpQ = (int64_t)Q << 16;
-		Q -= hpQ >> 16;
-		hpQ = (hpQ * ((1 << 16) - HPF_ALPHA) + tmpQ * HPF_ALPHA) >> 16;
-#endif
+		/* Pause biasing. */
+		pio_sm_exec(pio1, 0, pio_encode_sideset(2, 2) | pio_encode_nop());
 
 #if LPF_SAMPLES
 		lpIavg1 += I - lpIh1[lpIidx];
@@ -588,49 +359,16 @@ static void rf_rx(void)
 		Q = lpQavg3 / (LPF_SAMPLES * LPF_SAMPLES * LPF_SAMPLES);
 #endif
 
-		if ((Q < 0) ^ (prevQ < 0)) {
-			stride *= ((I < 0) ^ (Q < 0)) ? 1 : -1;
-			period = (63 * period + stride) / 64;
-			frequency = CLK_SYS_HZ / ((period >> 3) * delta_netto);
-			stride = 0;
-		} else if ((I < 0) ^ (prevI < 0)) {
-			stride *= ((I < 0) ^ (Q < 0)) ? -1 : 1;
-			period = (63 * period + stride) / 64;
-			frequency = CLK_SYS_HZ / ((period >> 3) * delta_netto);
-			stride = 0;
-		} else {
-			stride += 1024;
+		status.sample_rate = CLK_RF_HZ / (NUM_SAMPLES * 32);
+		status.gap = gap;
+
+		block[block_ptr++] = I;
+		block[block_ptr++] = Q;
+
+		if (block_ptr >= IQ_BLOCK_LEN) {
+			queue_try_add(&rx_queue, block);
+			block_ptr = 0;
 		}
-
-		prevI = I;
-		prevQ = Q;
-
-		int angle = cheap_atan2(I, Q);
-		int angle_delta = cheap_angle_diff(angle, prev_angle);
-		prev_angle = angle;
-
-		if (angle_delta) {
-			rotation = (rotation * 31 + ((last_angle_delta / angle_stride) >> 16)) / 32;
-			last_angle_delta = angle_delta;
-			angle_stride = 1;
-		} else {
-			angle_stride++;
-		}
-
-		uint64_t ssi = (uint64_t)I * (uint64_t)I + (uint64_t)Q * (uint64_t)Q;
-		const uint64_t alpha = RSSI_ALPHA;
-
-		assi0 = (assi0 * (256 - alpha) + (ssi << 16) * alpha) / 256;
-		assi1 = (assi1 * (256 - alpha) + assi0 * alpha) / 256;
-		assi2 = (assi2 * (256 - alpha) + assi1 * alpha) / 256;
-
-		status.rssi_raw = assi2 >> 16;
-		status.frequency = frequency;
-		status.sample_rate = CLK_SYS_HZ / (delta_netto * 32);
-		status.angle = rotation << 16;
-		status.I = I;
-		status.Q = Q;
-		status.mtime = time_us_32();
 	}
 }
 
@@ -727,14 +465,10 @@ static void command(const char *cmd)
 		multicore_launch_core1(rf_rx);
 		sleep_us(100);
 
-		unsigned last = 0;
-
 		while (true) {
 			int c = getchar_timeout_us(0);
 
 			if (13 == c) {
-				multicore_fifo_push_blocking(PLEASE_DIE);
-				multicore_fifo_pop_blocking();
 				multicore_reset_core1();
 				dma_channel_abort(rx_dma);
 				dma_channel_cleanup(rx_dma);
@@ -742,27 +476,18 @@ static void command(const char *cmd)
 				break;
 			}
 
-			static struct status st;
-			st = status;
+			static int16_t block[IQ_BLOCK_LEN];
 
-			if (st.mtime == last)
-				continue;
+			while (queue_try_remove(&rx_queue, block)) {
+				putchar('!');
 
-			last = st.mtime;
+				for (int i = 0; i < IQ_BLOCK_LEN; i++)
+					printf("%04hx", block[i]);
 
-			float rssi_rel = st.rssi_raw / st.rssi_max;
+				putchar('\n');
+			}
 
-			printf("%5.1f dBm (%5.0f) [%5u %+7i] %+5.1f ", 10.0f * log10f(rssi_rel),
-			       sqrtf(st.rssi_raw), st.sample_rate,
-			       (abs(st.frequency) > (int)(st.sample_rate / 2)) ? 0 : st.frequency,
-			       180.0f * st.angle / (float)INT_MAX);
-
-			plot_IQ(st.I, st.Q);
-			puts("");
-
-#if SLEEP_US
-			sleep_us(SLEEP_US);
-#endif
+			printf("gap=%i, sr=%i\n", status.gap, status.sample_rate);
 		}
 
 		return;
@@ -803,7 +528,7 @@ static void command(const char *cmd)
 
 		send_init(n);
 
-		const float step_hz = (float)CLK_SYS_HZ / (LO_WORDS * 32);
+		const float step_hz = (float)CLK_RF_HZ / (LO_WORDS * 32);
 		const float start = roundf(f / step_hz) * step_hz;
 		const float stop = roundf(g / step_hz) * step_hz;
 
@@ -884,13 +609,10 @@ int main()
 	tx_dma = dma_claim_unused_channel(true);
 	rx_dma = dma_claim_unused_channel(true);
 
+	queue_init(&rx_queue, IQ_BLOCK_LEN * 2, 64);
+
 	printf("\nPuppet Online!\n");
 	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / MHZ);
-
-#if SPEED < 3
-	printf("Generating mixer lookup table...\n");
-	generate_mixer();
-#endif
 
 	static char cmd[83];
 	int cmdlen = 0;
