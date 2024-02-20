@@ -89,12 +89,10 @@ static void bias_init(int in_pin, int out_pin)
 
 	pio_sm_config pc = pio_get_default_sm_config();
 	sm_config_set_in_pins(&pc, in_pin);
-	sm_config_set_sideset(&pc, 2, false, true);
-	sm_config_set_sideset_pins(&pc, out_pin);
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, 0, 0);
-	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
+	sm_config_set_clkdiv_int_frac(&pc, 3, 127);
 	pio_sm_init(pio1, 0, 0, &pc);
 
 	pio_sm_set_consecutive_pindirs(pio1, 0, out_pin, 1, GPIO_OUT);
@@ -304,13 +302,6 @@ static void rf_rx(void)
 		int I = mix(rx_buf + pos, lo_cos + pos, NUM_SAMPLES);
 		int Q = mix(rx_buf + pos, lo_sin + pos, NUM_SAMPLES);
 
-		/*
-		 * Limit our biasing activity to a short period at a time.
-		 * This is sufficient to keep the input biased while limiting
-		 * the interference from biasing to minimum.
-		 */
-		pio_sm_exec(pio1, 0, pio_encode_sideset(2, 3) | pio_encode_nop());
-
 		/* Remove the large DC bias. */
 		I -= 16 * NUM_SAMPLES;
 		Q -= 16 * NUM_SAMPLES;
@@ -325,9 +316,6 @@ static void rf_rx(void)
 
 		I /= NUM_SAMPLES;
 		Q /= NUM_SAMPLES;
-
-		/* Pause biasing. */
-		pio_sm_exec(pio1, 0, pio_encode_sideset(2, 2) | pio_encode_nop());
 
 #if LPF_SAMPLES
 		lpIavg1 += I - lpIh1[lpIidx];
