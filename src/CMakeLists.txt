@@ -19,6 +19,7 @@ target_link_libraries(
   hardware_divider
   hardware_dma
   hardware_pio
+  hardware_pwm
   hardware_timer
   hardware_vreg
   hardware_interp
@@ -29,8 +30,8 @@ pico_add_extra_outputs(pico_sdr)
 set_property(TARGET pico_sdr PROPERTY C_STANDARD 23)
 target_compile_options(pico_sdr PRIVATE -Wall -Wextra -Wnull-dereference)
 target_compile_definitions(pico_sdr PUBLIC PICO_MAX_SHARED_IRQ_HANDLERS=8u)
-target_compile_definitions(pico_sdr PUBLIC PICO_STDIO_ENABLE_CRLF_SUPPORT=1)
-target_compile_definitions(pico_sdr PUBLIC PICO_STDIO_DEFAULT_CRLF=1)
+target_compile_definitions(pico_sdr PUBLIC PICO_STDIO_ENABLE_CRLF_SUPPORT=0)
+target_compile_definitions(pico_sdr PUBLIC PICO_STDIO_DEFAULT_CRLF=0)
 
 target_include_directories(pico_sdr PRIVATE include)
 
