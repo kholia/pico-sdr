@@ -92,13 +92,16 @@ static void bias_init(int in_pin, int out_pin)
 	gpio_set_drive_strength(out_pin, GPIO_DRIVE_STRENGTH_2MA);
 
 	const uint16_t insn[] = {
-		pio_encode_mov_not(pio_pins, pio_pins),
+		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(0),
+		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(1),
 	};
 
 	pio_program_t prog = {
 		.instructions = insn,
-		.length = 1,
-		.origin = 31,
+		.length = sizeof(insn) / sizeof(*insn),
+		.origin = 16,
 	};
 
 	pio_sm_set_enabled(pio1, 0, false);
@@ -109,11 +112,13 @@ static void bias_init(int in_pin, int out_pin)
 		pio_add_program(pio1, &prog);
 
 	pio_sm_config pc = pio_get_default_sm_config();
+	sm_config_set_sideset(&pc, 1, false, true);
+	sm_config_set_sideset_pins(&pc, out_pin);
 	sm_config_set_in_pins(&pc, in_pin);
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, prog.origin, prog.origin + prog.length - 1);
-	sm_config_set_clkdiv_int_frac(&pc, 7, 127);
+	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
 	pio_sm_init(pio1, 0, prog.origin, &pc);
 
 	pio_sm_set_consecutive_pindirs(pio1, 0, out_pin, 1, GPIO_OUT);
@@ -134,7 +139,7 @@ static void watch_init(int in_pin)
 	pio_program_t prog = {
 		.instructions = insn,
 		.length = 1,
-		.origin = 30,
+		.origin = 31,
 	};
 
 	pio_sm_set_enabled(pio1, 1, false);
@@ -169,7 +174,7 @@ static void send_init(int out_pin)
 	pio_program_t prog = {
 		.instructions = insn,
 		.length = 1,
-		.origin = 29,
+		.origin = 30,
 	};
 
 	pio_sm_set_enabled(pio1, 1, false);
