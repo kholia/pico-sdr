@@ -40,7 +40,7 @@
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 100000
 
-#define IQ_BLOCK_LEN 32
+#define IQ_BLOCK_LEN 64
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -530,11 +530,12 @@ static void rf_tx_stop()
 
 static void rf_rx(void)
 {
-	static int16_t block[IQ_BLOCK_LEN];
+	static int8_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
-	int64_t dcI = 0, dcQ = 0;
+	int noise_floor = sqrt((float)CLK_SYS_HZ / (float)BANDWIDTH * 3.0 / 4.0);
+	int noise_floor_inv = (1 << 16) / noise_floor;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -558,7 +559,7 @@ static void rf_rx(void)
 
 		pos = (pos + IQ_BLOCK_LEN) & (RX_WORDS - 1);
 
-		int16_t *blockptr = block;
+		int8_t *blockptr = block;
 
 		for (int i = 0; i < IQ_BLOCK_LEN / 2; i++) {
 			uint32_t cos_pos = *cos_ptr++;
@@ -569,11 +570,8 @@ static void rf_rx(void)
 			int I = cos_neg - cos_pos;
 			int Q = sin_neg - sin_pos;
 
-			dcI = (dcI * 8191 + ((int64_t)I << 16)) / 8192;
-			dcQ = (dcQ * 8191 + ((int64_t)Q << 16)) / 8192;
-
-			I -= dcI >> 16;
-			Q -= dcQ >> 16;
+			I = (I * noise_floor_inv) >> 16;
+			Q = (Q * noise_floor_inv) >> 16;
 
 			*blockptr++ = I;
 			*blockptr++ = Q;
@@ -679,7 +677,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 
 	printf("Frequency: %.0f\n", actual);
 
-	static int16_t block[IQ_BLOCK_LEN];
+	static int8_t block[IQ_BLOCK_LEN];
 
 	while (queue_try_remove(&iq_queue, block))
 		/* Flush the queue */;
@@ -870,7 +868,7 @@ int main()
 	printf("\nPuppet Online!\n");
 	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / MHZ);
 
-	queue_init(&iq_queue, IQ_BLOCK_LEN * 2, 256);
+	queue_init(&iq_queue, IQ_BLOCK_LEN * sizeof(int8_t), 256);
 
 	static char cmd[83];
 	int cmdlen = 0;
