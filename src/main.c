@@ -538,6 +538,8 @@ static void rf_rx(void)
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
+	int dcI = 0, dcQ = 0;
+
 	while (true) {
 		if (multicore_fifo_rvalid()) {
 			multicore_fifo_pop_blocking();
@@ -570,6 +572,12 @@ static void rf_rx(void)
 
 			int I = cos_neg - cos_pos;
 			int Q = sin_neg - sin_pos;
+
+			dcI = (dcI * 255 + I * 256) >> 8;
+			dcQ = (dcQ * 255 + Q * 256) >> 8;
+
+			I -= dcI >> 8;
+			Q -= dcQ >> 8;
 
 			*blockptr++ = I;
 			*blockptr++ = Q;
