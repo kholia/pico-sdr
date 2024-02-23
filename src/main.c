@@ -252,8 +252,8 @@ static float lo_freq_init(double req_freq)
 	double freq = round(req_freq / step_hz) * step_hz;
 
 	unsigned step = ((double)UINT_MAX + 1.0) / (double)CLK_SYS_HZ * freq;
-	unsigned asin = 0;
-	unsigned acos = UINT_MAX / 4;
+	unsigned asin = UINT_MAX / 4;
+	unsigned acos = 0;
 
 	for (int i = 0; i < LO_WORDS; i++) {
 		unsigned bsin = 0, bcos = 0;
