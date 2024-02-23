@@ -38,7 +38,7 @@
 #include <stdlib.h>
 
 #define CLK_SYS_HZ (250 * MHZ)
-#define BANDWIDTH 8000
+#define BANDWIDTH 100000
 
 #define EXTRA_BITS 8
 #define NUM_SAMPLES 128
