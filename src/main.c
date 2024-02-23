@@ -40,10 +40,6 @@
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 100000
 
-#define EXTRA_BITS 8
-#define NUM_SAMPLES 128
-#define LPF_SAMPLES 0 /* 4 */
-
 #define IQ_BLOCK_LEN 32
 
 #define XOR_ADDR 0x1000
