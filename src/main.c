@@ -815,7 +815,7 @@ static void command(const char *cmd)
 		rf_tx_start(n);
 
 		for (int i = 0; i < steps; i += x) {
-			int c = getchar_timeout_us(100);
+			int c = getchar_timeout_us(10000);
 			if ('\r' == c)
 				break;
 
