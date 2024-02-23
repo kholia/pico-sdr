@@ -194,7 +194,6 @@ static void send_init(int out_pin)
 
 static void adder_init()
 {
-#if 1
 	const uint16_t insn[] = {
 		pio_encode_jmp_y_dec(1),
 		pio_encode_out(pio_pc, 2),
@@ -204,13 +203,6 @@ static void adder_init()
 		/* Avoid Y-- on wrap. */
 		pio_encode_out(pio_pc, 2),
 	};
-#else
-	/* For debugging. Consumes at full speed and counts at half cycles. */
-	const uint16_t insn[] = {
-		pio_encode_out(pio_null, 2),
-		pio_encode_jmp_x_dec(0),
-	};
-#endif
 
 	pio_program_t prog = {
 		.instructions = insn,
