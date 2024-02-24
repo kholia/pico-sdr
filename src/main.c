@@ -839,19 +839,21 @@ static void command(const char *cmd)
 		rf_tx_start(n);
 		puts("Transmitting, press ENTER to stop.");
 
+		bool phase = false;
+
 		while (true) {
 			int c = getchar_timeout_us(1000);
 
 			if ('\r' == c) {
 				break;
 			} else if (' ' == c) {
-				pio_sm_exec(pio1, 1, pio_encode_nop());
-				pio_sm_exec(pio1, 1, pio_encode_nop());
-				pio_sm_exec(pio1, 1, pio_encode_nop());
+				phase = !phase;
+				gpio_set_outover(n, phase);
 			}
 		}
 
 		rf_tx_stop();
+		gpio_set_outover(n, 0);
 		puts("Done.");
 		return;
 	}
