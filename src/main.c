@@ -163,7 +163,7 @@ static void send_init(int out_pin)
 	gpio_set_slew_rate(out_pin, GPIO_SLEW_RATE_SLOW);
 
 	const uint16_t insn[] = {
-		pio_encode_out(pio_pins, 1),
+		pio_encode_out(pio_pins, 1) | pio_encode_sideset(1, 1),
 	};
 
 	pio_program_t prog = {
@@ -180,6 +180,8 @@ static void send_init(int out_pin)
 		pio_add_program(pio1, &prog);
 
 	pio_sm_config pc = pio_get_default_sm_config();
+	sm_config_set_sideset(&pc, 1, false, true);
+	sm_config_set_sideset_pins(&pc, out_pin);
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
 	sm_config_set_wrap(&pc, prog.origin, prog.origin + prog.length - 1);
@@ -792,6 +794,10 @@ static void command(const char *cmd)
 
 			if ('\r' == c) {
 				break;
+			} else if (' ' == c) {
+				pio_sm_exec(pio1, 1, pio_encode_nop());
+				pio_sm_exec(pio1, 1, pio_encode_nop());
+				pio_sm_exec(pio1, 1, pio_encode_nop());
 			}
 		}
 
