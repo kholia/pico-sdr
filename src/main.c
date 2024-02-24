@@ -550,12 +550,7 @@ static void rf_rx(void)
 	int lpQa3 = 0;
 
 	int64_t dcI = 0, dcQ = 0;
-
-	/*
-	 * CLK / BW for oversampling, but 1/2 for the -1/0/0/1 PIO outcomes.
-	 * Signal can get outside due to DC offset compensation.
-	 */
-	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION;
+	int64_t agc = 127;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -639,20 +634,19 @@ static void rf_rx(void)
 			dI = ((dI << 19) - dcI) >> 19;
 			dQ = ((dQ << 19) - dcQ) >> 19;
 
-			if (dI > amp_max)
-				dI = amp_max;
+			dI <<= 32;
+			dQ <<= 32;
 
-			if (dI < -amp_max)
-				dI = -amp_max;
+			agc -= (1 << 12) / DECIMATION * BANDWIDTH;
 
-			if (dQ > amp_max)
-				dQ = amp_max;
+			if (llabs(dI) > agc)
+				agc = llabs(dI);
 
-			if (dQ < -amp_max)
-				dQ = -amp_max;
+			if (llabs(dQ) > agc)
+				agc = llabs(dQ);
 
-			*blockptr++ = 127 * dI / amp_max;
-			*blockptr++ = 127 * dQ / amp_max;
+			*blockptr++ = 127 * dI / agc;
+			*blockptr++ = 127 * dQ / agc;
 		}
 
 		if (!queue_try_add(&iq_queue, block)) {
