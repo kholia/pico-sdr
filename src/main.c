@@ -86,6 +86,7 @@ static void bias_init(int in_pin, int out_pin)
 	gpio_set_input_hysteresis_enabled(in_pin, false);
 	gpio_set_input_hysteresis_enabled(out_pin, false);
 	gpio_set_drive_strength(out_pin, GPIO_DRIVE_STRENGTH_2MA);
+	gpio_set_slew_rate(out_pin, GPIO_SLEW_RATE_SLOW);
 
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
