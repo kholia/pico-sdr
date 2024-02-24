@@ -551,8 +551,7 @@ static void rf_rx(void)
 
 	int64_t dcI = 0, dcQ = 0;
 
-	int noise_floor = sqrt((float)CLK_SYS_HZ / BANDWIDTH * DECIMATION * 3.0 / 4.0);
-	int64_t noise_floor_inv = (1ll << 32) / noise_floor;
+	const int amp_max = (float)CLK_SYS_HZ / BANDWIDTH * DECIMATION * 3.0 / 4.0 / 2.0;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -630,11 +629,8 @@ static void rf_rx(void)
 				dcQ = ((dcQ << 20) - dcQ + Q64) >> 20;
 			}
 
-			dI = (dI * noise_floor_inv) >> 32;
-			dQ = (dQ * noise_floor_inv) >> 32;
-
-			*blockptr++ = dI;
-			*blockptr++ = dQ;
+			*blockptr++ = 127 * dI / amp_max;
+			*blockptr++ = 127 * dQ / amp_max;
 		}
 
 		if (!queue_try_add(&iq_queue, block)) {
