@@ -594,6 +594,9 @@ static void rf_rx(void)
 				int I = cos_neg - cos_pos;
 				int Q = sin_neg - sin_pos;
 
+				I <<= 8;
+				Q <<= 8;
+
 				int lpP = d & (LPF_SIZE - 1);
 
 				lpIa1 += I - lpIh1[lpP];
@@ -623,6 +626,9 @@ static void rf_rx(void)
 				I = lpIa3 / LPF_SIZE;
 				Q = lpQa3 / LPF_SIZE;
 
+				I >>= 8;
+				Q >>= 8;
+
 				dI += I;
 				dQ += Q;
 			}
@@ -630,8 +636,8 @@ static void rf_rx(void)
 			dcI = ((dcI << 13) - dcI + (dI << 19)) >> 13;
 			dcQ = ((dcQ << 13) - dcQ + (dQ << 19)) >> 13;
 
-			dI -= dcI >> 19;
-			dQ -= dcQ >> 19;
+			dI = ((dI << 19) - dcI) >> 19;
+			dQ = ((dQ << 19) - dcQ) >> 19;
 
 			if (dI > amp_max)
 				dI = amp_max;
