@@ -544,6 +544,11 @@ static void rf_rx(void)
 	int lpIa2 = 0;
 	int lpQa2 = 0;
 
+	static int lpIh3[LPF_SIZE];
+	static int lpQh3[LPF_SIZE];
+	int lpIa3 = 0;
+	int lpQa3 = 0;
+
 	int64_t dcI = 0, dcQ = 0;
 
 	int noise_floor = sqrt((float)CLK_SYS_HZ / BANDWIDTH * DECIMATION * 3.0 / 4.0);
@@ -605,6 +610,15 @@ static void rf_rx(void)
 
 				I = lpIa2 / LPF_SIZE;
 				Q = lpQa2 / LPF_SIZE;
+
+				lpIa3 += I - lpIh3[lpP];
+				lpQa3 += Q - lpQh3[lpP];
+
+				lpIh3[lpP] = I;
+				lpQh3[lpP] = Q;
+
+				I = lpIa3 / LPF_SIZE;
+				Q = lpQa3 / LPF_SIZE;
 
 				int64_t I64 = (int64_t)I << 32;
 				int64_t Q64 = (int64_t)Q << 32;
