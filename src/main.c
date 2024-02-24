@@ -527,6 +527,8 @@ static void rf_rx(void)
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
+	int64_t dcI = 0, dcQ = 0;
+
 	int noise_floor = sqrt((float)CLK_SYS_HZ / (float)BANDWIDTH * 3.0 / 4.0);
 	int noise_floor_inv = (1 << 16) / noise_floor;
 
@@ -562,6 +564,15 @@ static void rf_rx(void)
 
 			int I = cos_neg - cos_pos;
 			int Q = sin_neg - sin_pos;
+
+			int64_t I64 = (int64_t)I << 32;
+			int64_t Q64 = (int64_t)Q << 32;
+
+			I = (I64 - dcI) >> 32;
+			Q = (Q64 - dcQ) >> 32;
+
+			dcI = ((dcI << 20) - dcI + I64) >> 20;
+			dcQ = ((dcQ << 20) - dcQ + Q64) >> 20;
 
 			I = (I * noise_floor_inv) >> 16;
 			Q = (Q * noise_floor_inv) >> 16;
