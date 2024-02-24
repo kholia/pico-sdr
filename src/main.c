@@ -551,7 +551,11 @@ static void rf_rx(void)
 
 	int64_t dcI = 0, dcQ = 0;
 
-	const int amp_max = (float)CLK_SYS_HZ / BANDWIDTH * DECIMATION * 3.0 / 4.0 / 2.0;
+	/*
+	 * CLK / BW for oversampling, but 1/2 for the -1/0/0/1 PIO outcomes.
+	 * Signal can get outside due to DC offset compensation.
+	 */
+	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -619,15 +623,27 @@ static void rf_rx(void)
 				I = lpIa3 / LPF_SIZE;
 				Q = lpQa3 / LPF_SIZE;
 
-				int64_t I64 = (int64_t)I << 32;
-				int64_t Q64 = (int64_t)Q << 32;
-
-				dI += (I64 - dcI) >> 32;
-				dQ += (Q64 - dcQ) >> 32;
-
-				dcI = ((dcI << 20) - dcI + I64) >> 20;
-				dcQ = ((dcQ << 20) - dcQ + Q64) >> 20;
+				dI += I;
+				dQ += Q;
 			}
+
+			dcI = ((dcI << 13) - dcI + (dI << 19)) >> 13;
+			dcQ = ((dcQ << 13) - dcQ + (dQ << 19)) >> 13;
+
+			dI -= dcI >> 19;
+			dQ -= dcQ >> 19;
+
+			if (dI > amp_max)
+				dI = amp_max;
+
+			if (dI < -amp_max)
+				dI = -amp_max;
+
+			if (dQ > amp_max)
+				dQ = amp_max;
+
+			if (dQ < -amp_max)
+				dQ = -amp_max;
 
 			*blockptr++ = 127 * dI / amp_max;
 			*blockptr++ = 127 * dQ / amp_max;
