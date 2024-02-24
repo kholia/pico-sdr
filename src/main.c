@@ -38,9 +38,12 @@
 #include <stdlib.h>
 
 #define CLK_SYS_HZ (250 * MHZ)
-#define BANDWIDTH 100000
+#define BANDWIDTH 768000
+#define DECIMATION 32
+#define LPF_SIZE DECIMATION
 
 #define IQ_BLOCK_LEN 64
+#define RX_BLOCK_LEN (IQ_BLOCK_LEN * DECIMATION)
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -51,10 +54,12 @@
 static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
-#define RX_BITS_DEPTH 10
+#define RX_BITS_DEPTH 12
 #define RX_WORDS (1 << RX_BITS_DEPTH)
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
+
+static_assert(RX_WORDS > RX_BLOCK_LEN, "RX buffers too short for given decimation");
 
 /* rx -> cp -> cos -> sin -> pio_cos -> pio_sin -> rx ... */
 static int dma_ch_rx = -1;
@@ -529,10 +534,20 @@ static void rf_rx(void)
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
+	static int lpIh1[LPF_SIZE];
+	static int lpQh1[LPF_SIZE];
+	int lpIa1 = 0;
+	int lpQa1 = 0;
+
+	static int lpIh2[LPF_SIZE];
+	static int lpQh2[LPF_SIZE];
+	int lpIa2 = 0;
+	int lpQa2 = 0;
+
 	int64_t dcI = 0, dcQ = 0;
 
-	int noise_floor = sqrt((float)CLK_SYS_HZ / (float)BANDWIDTH * 3.0 / 4.0);
-	int noise_floor_inv = (1 << 16) / noise_floor;
+	int noise_floor = sqrt((float)CLK_SYS_HZ / BANDWIDTH * DECIMATION * 3.0 / 4.0);
+	int64_t noise_floor_inv = (1ll << 32) / noise_floor;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -542,45 +557,70 @@ static void rf_rx(void)
 		}
 
 		int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-		gap = IQ_BLOCK_LEN - delta;
+		gap = RX_BLOCK_LEN - delta;
 
-		while (delta < IQ_BLOCK_LEN) {
+		while (delta < RX_BLOCK_LEN) {
 			delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
 			sleep_us(100);
 		}
 
-		prev_transfers -= IQ_BLOCK_LEN;
+		prev_transfers -= RX_BLOCK_LEN;
 
 		uint32_t *cos_ptr = rx_cos + pos;
 		uint32_t *sin_ptr = rx_sin + pos;
 
-		pos = (pos + IQ_BLOCK_LEN) & (RX_WORDS - 1);
+		pos = (pos + RX_BLOCK_LEN) & (RX_WORDS - 1);
 
 		int8_t *blockptr = block;
 
 		for (int i = 0; i < IQ_BLOCK_LEN / 2; i++) {
-			uint32_t cos_pos = *cos_ptr++;
-			uint32_t cos_neg = *cos_ptr++;
-			uint32_t sin_pos = *sin_ptr++;
-			uint32_t sin_neg = *sin_ptr++;
+			int64_t dI = 0;
+			int64_t dQ = 0;
 
-			int I = cos_neg - cos_pos;
-			int Q = sin_neg - sin_pos;
+			for (int d = 0; d < DECIMATION; d++) {
+				uint32_t cos_pos = *cos_ptr++;
+				uint32_t cos_neg = *cos_ptr++;
+				uint32_t sin_pos = *sin_ptr++;
+				uint32_t sin_neg = *sin_ptr++;
 
-			int64_t I64 = (int64_t)I << 32;
-			int64_t Q64 = (int64_t)Q << 32;
+				int I = cos_neg - cos_pos;
+				int Q = sin_neg - sin_pos;
 
-			I = (I64 - dcI) >> 32;
-			Q = (Q64 - dcQ) >> 32;
+				int lpP = d & (LPF_SIZE - 1);
 
-			dcI = ((dcI << 20) - dcI + I64) >> 20;
-			dcQ = ((dcQ << 20) - dcQ + Q64) >> 20;
+				lpIa1 += I - lpIh1[lpP];
+				lpQa1 += Q - lpQh1[lpP];
 
-			I = (I * noise_floor_inv) >> 16;
-			Q = (Q * noise_floor_inv) >> 16;
+				lpIh1[lpP] = I;
+				lpQh1[lpP] = Q;
 
-			*blockptr++ = I;
-			*blockptr++ = Q;
+				I = lpIa1 / LPF_SIZE;
+				Q = lpQa1 / LPF_SIZE;
+
+				lpIa2 += I - lpIh2[lpP];
+				lpQa2 += Q - lpQh2[lpP];
+
+				lpIh2[lpP] = I;
+				lpQh2[lpP] = Q;
+
+				I = lpIa2 / LPF_SIZE;
+				Q = lpQa2 / LPF_SIZE;
+
+				int64_t I64 = (int64_t)I << 32;
+				int64_t Q64 = (int64_t)Q << 32;
+
+				dI += (I64 - dcI) >> 32;
+				dQ += (Q64 - dcQ) >> 32;
+
+				dcI = ((dcI << 20) - dcI + I64) >> 20;
+				dcQ = ((dcQ << 20) - dcQ + Q64) >> 20;
+			}
+
+			dI = (dI * noise_floor_inv) >> 32;
+			dQ = (dQ * noise_floor_inv) >> 32;
+
+			*blockptr++ = dI;
+			*blockptr++ = dQ;
 		}
 
 		if (!queue_try_add(&iq_queue, block)) {
