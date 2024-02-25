@@ -43,7 +43,6 @@
 #define LPF_SIZE DECIMATION
 
 #define IQ_BLOCK_LEN 64
-#define RX_BLOCK_LEN (IQ_BLOCK_LEN * DECIMATION)
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -62,7 +61,7 @@ static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 #define SIN_PHASE (UINT_MAX / 4)
 #define COS_PHASE (0)
 
-static_assert(RX_WORDS > RX_BLOCK_LEN, "RX buffers too short for given decimation");
+static_assert(RX_WORDS > 2 * DECIMATION, "RX buffers too short for given decimation");
 
 /* rx -> cp -> cos -> sin -> pio_cos -> pio_sin -> rx ... */
 static int dma_ch_rx = -1;
@@ -580,24 +579,24 @@ static void rf_rx(void)
 			return;
 		}
 
-		int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-		gap = RX_BLOCK_LEN - delta;
-
-		while (delta < RX_BLOCK_LEN) {
-			delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-			sleep_us(100);
-		}
-
-		prev_transfers -= RX_BLOCK_LEN;
-
-		uint32_t *cos_ptr = rx_cos + pos;
-		uint32_t *sin_ptr = rx_sin + pos;
-
-		pos = (pos + RX_BLOCK_LEN) & (RX_WORDS - 1);
-
 		int8_t *blockptr = block;
 
 		for (int i = 0; i < IQ_BLOCK_LEN / 2; i++) {
+			int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
+			gap = 2 * DECIMATION - delta;
+
+			while (delta < 2 * DECIMATION) {
+				delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
+				sleep_us(100);
+			}
+
+			prev_transfers -= 2 * DECIMATION;
+
+			uint32_t *cos_ptr = rx_cos + pos;
+			uint32_t *sin_ptr = rx_sin + pos;
+
+			pos = (pos + 2 * DECIMATION) & (RX_WORDS - 1);
+
 			int64_t dI = 0;
 			int64_t dQ = 0;
 
