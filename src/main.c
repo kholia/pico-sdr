@@ -59,6 +59,9 @@ static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 
+#define SIN_PHASE (UINT_MAX / 4)
+#define COS_PHASE (0)
+
 static_assert(RX_WORDS > RX_BLOCK_LEN, "RX buffers too short for given decimation");
 
 /* rx -> cp -> cos -> sin -> pio_cos -> pio_sin -> rx ... */
@@ -244,33 +247,49 @@ static void adder_init()
 	pio_sm_set_enabled(pio1, 3, true);
 }
 
-static float lo_freq_init(double req_freq)
+inline static float lo_round_freq(size_t bits, float req_freq)
 {
-	const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
-	double freq = round(req_freq / step_hz) * step_hz;
+	const double step_hz = (double)CLK_SYS_HZ / bits;
+	return round(req_freq / step_hz) * step_hz;
+}
 
+static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
+{
 	unsigned step = ((double)UINT_MAX + 1.0) / (double)CLK_SYS_HZ * freq;
-	unsigned asin = UINT_MAX / 4;
-	unsigned acos = 0;
+	unsigned accum = phase;
 
-	for (int i = 0; i < LO_WORDS; i++) {
-		unsigned bsin = 0, bcos = 0;
+	for (size_t i = 0; i < len; i++) {
+		unsigned bits = 0;
 
 		for (int j = 0; j < 32; j++) {
-			bsin |= asin >> 31;
-			bsin <<= 1;
-			asin += step;
-
-			bcos |= acos >> 31;
-			bcos <<= 1;
-			acos += step;
+			bits |= accum >> 31;
+			bits <<= 1;
+			accum += step;
 		}
 
-		lo_sin[i] = bsin;
-		lo_cos[i] = bcos;
+		buf[i] = bits;
 	}
+}
+
+static float rx_lo_init(double req_freq)
+{
+	float freq = lo_round_freq(LO_WORDS * 32, req_freq);
+
+	lo_generate(lo_cos, LO_WORDS, freq, COS_PHASE);
+	lo_generate(lo_sin, LO_WORDS, freq, SIN_PHASE);
 
 	return freq;
+}
+
+static float tx_fsk_lo_init(float req_freq, float separation)
+{
+	float hi = lo_round_freq(LO_WORDS * 32, req_freq + separation / 2);
+	float lo = lo_round_freq(LO_WORDS * 32, hi - separation);
+
+	lo_generate(lo_cos, LO_WORDS, hi, COS_PHASE);
+	lo_generate(lo_sin, LO_WORDS, lo, SIN_PHASE);
+
+	return (hi + lo) / 2.0f;
 }
 
 inline static __unused int cheap_atan2(int y, int x)
@@ -428,7 +447,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	bias_init(rx_pin, bias_pin);
 	adder_init();
 
-	float actual = lo_freq_init(freq);
+	float actual = rx_lo_init(freq);
 
 	dma_channel_start(dma_ch_rx);
 	dma_channel_start(dma_ch_samp_trig);
@@ -817,7 +836,8 @@ static void command(const char *cmd)
 		puts("bias I O         - output negated I to O");
 		puts("rx N FREQ        - receive on pin N");
 		puts("brx N FREQ       - receive on pin N, binary output");
-		puts("tx N FREQ        - transmit on pin N");
+		puts("bpsk N FREQ      - transmit on pin N with BPSK");
+		puts("fsk N FREQ       - transmit on pin N with FSK");
 		puts("sweep N F G S    - sweep from F to G with given step");
 		puts("noise N          - transmit random noise");
 		return;
@@ -850,8 +870,8 @@ static void command(const char *cmd)
 		return;
 	}
 
-	if (3 == sscanf(cmd, " tx %i %f %[\a]", &n, &f, tmp)) {
-		float actual = lo_freq_init(f);
+	if (3 == sscanf(cmd, " bpsk %i %f %[\a]", &n, &f, tmp)) {
+		float actual = rx_lo_init(f);
 		printf("Frequency: %.0f\n", actual);
 
 		rf_tx_start(n);
@@ -869,16 +889,54 @@ static void command(const char *cmd)
 				phase = !phase;
 				gpio_set_outover(n, phase);
 			} else if ('+' == c) {
-				actual = lo_freq_init(actual + step_hz);
+				actual = rx_lo_init(actual + step_hz);
 				printf("Frequency: %.0f\n", actual);
 			} else if ('-' == c) {
-				actual = lo_freq_init(actual - step_hz);
+				actual = rx_lo_init(actual - step_hz);
 				printf("Frequency: %.0f\n", actual);
 			}
 		}
 
 		rf_tx_stop();
 		gpio_set_outover(n, 0);
+		puts("Done.");
+		return;
+	}
+
+	if (4 == sscanf(cmd, " fsk %i %f %f %[\a]", &n, &f, &g, tmp)) {
+		g = lo_round_freq(LO_WORDS * 32, g);
+		f = tx_fsk_lo_init(f, g);
+		printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
+
+		rf_tx_start(n);
+		puts("Transmitting, press ENTER to stop.");
+
+		bool high = true;
+		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
+
+		while (true) {
+			int c = getchar_timeout_us(10000);
+
+			if ('\r' == c) {
+				break;
+			} else if (' ' == c) {
+				high = !high;
+
+				if (high) {
+					dma_hw->ch[dma_ch_tx_cos].read_addr = (uint32_t)lo_cos;
+				} else {
+					dma_hw->ch[dma_ch_tx_cos].read_addr = (uint32_t)lo_sin;
+				}
+			} else if ('+' == c) {
+				f = tx_fsk_lo_init(f + step_hz, g);
+				printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
+			} else if ('-' == c) {
+				f = tx_fsk_lo_init(f - step_hz, g);
+				printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
+			}
+		}
+
+		rf_tx_stop();
 		puts("Done.");
 		return;
 	}
@@ -900,7 +958,7 @@ static void command(const char *cmd)
 			if ('\r' == c)
 				break;
 
-			float actual = lo_freq_init(start + i * step_hz);
+			float actual = rx_lo_init(start + i * step_hz);
 			printf("Frequency: %.0f\n", actual);
 		}
 
