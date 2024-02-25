@@ -78,6 +78,8 @@ static int dma_t_samp = -1;
 static int dma_ch_in_cos = -1;
 static int dma_ch_in_sin = -1;
 
+static int dma_ch_tx_cos = -1;
+
 static queue_t iq_queue;
 static int gap = 0;
 
@@ -503,15 +505,15 @@ static void rf_tx_start(int tx_pin)
 {
 	send_init(tx_pin);
 
-	dma_ch_cos = dma_claim_unused_channel(true);
+	dma_ch_tx_cos = dma_claim_unused_channel(true);
 
-	dma_channel_config dma_conf = dma_channel_get_default_config(dma_ch_cos);
+	dma_channel_config dma_conf = dma_channel_get_default_config(dma_ch_tx_cos);
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
 	channel_config_set_read_increment(&dma_conf, true);
 	channel_config_set_write_increment(&dma_conf, false);
 	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
 	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 1, true));
-	dma_channel_configure(dma_ch_cos, &dma_conf, &pio1->txf[1], lo_cos, UINT_MAX, true);
+	dma_channel_configure(dma_ch_tx_cos, &dma_conf, &pio1->txf[1], lo_cos, UINT_MAX, true);
 }
 
 static void rf_tx_stop()
@@ -522,10 +524,10 @@ static void rf_tx_stop()
 	pio_sm_clear_fifos(pio1, 1);
 
 	puts("Stopping DMA...");
-	dma_channel_abort(dma_ch_cos);
-	dma_channel_cleanup(dma_ch_cos);
-	dma_channel_unclaim(dma_ch_cos);
-	dma_ch_cos = -1;
+	dma_channel_abort(dma_ch_tx_cos);
+	dma_channel_cleanup(dma_ch_tx_cos);
+	dma_channel_unclaim(dma_ch_tx_cos);
+	dma_ch_tx_cos = -1;
 }
 
 static void rf_rx(void)
