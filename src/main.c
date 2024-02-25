@@ -38,8 +38,8 @@
 #include <stdlib.h>
 
 #define CLK_SYS_HZ (250 * MHZ)
-#define BANDWIDTH 768000
-#define DECIMATION 32
+#define BANDWIDTH 1024000
+#define DECIMATION 64
 #define LPF_SIZE DECIMATION
 
 #define IQ_BLOCK_LEN 64

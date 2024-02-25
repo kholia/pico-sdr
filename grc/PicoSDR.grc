@@ -56,7 +56,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 768_000 // 32
+    value: 1_024_000 // 64
   states:
     bus_sink: false
     bus_source: false
@@ -113,6 +113,20 @@ blocks:
     coordinate: [224, 208.0]
     rotation: 0
     state: true
+- name: blocks_message_debug_0
+  id: blocks_message_debug
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    en_uvec: 'True'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1000, 32.0]
+    rotation: 0
+    state: true
 - name: blocks_nlog10_ff_0
   id: blocks_nlog10_ff
   parameters:
@@ -131,6 +145,25 @@ blocks:
     coordinate: [888, 432.0]
     rotation: 0
     state: true
+- name: blocks_probe_rate_0
+  id: blocks_probe_rate
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha: '0.15'
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    mintime: '1000'
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [704, 16.0]
+    rotation: 0
+    state: true
 - name: digital_costas_loop_cc_0
   id: digital_costas_loop_cc
   parameters:
@@ -146,7 +179,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 288.0]
+    coordinate: [704, 304.0]
     rotation: 0
     state: true
 - name: import_0
@@ -169,21 +202,45 @@ blocks:
     alias: ''
     beta: '6.76'
     comment: ''
-    cutoff_freq: '1250'
+    cutoff_freq: '1900'
     decim: '1'
-    gain: '4'
+    gain: '1'
     interp: '1'
     maxoutbuf: '0'
     minoutbuf: '0'
     samp_rate: samp_rate
     type: fir_filter_fff
-    width: '500'
+    width: '100'
     win: window.WIN_HAMMING
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
     coordinate: [704, 516.0]
+    rotation: 0
+    state: true
+- name: low_pass_filter_1_0
+  id: low_pass_filter
+  parameters:
+    affinity: ''
+    alias: ''
+    beta: '6.76'
+    comment: ''
+    cutoff_freq: '15'
+    decim: '1'
+    gain: '1'
+    interp: '1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: samp_rate
+    type: fir_filter_fff
+    width: '15'
+    win: window.WIN_BLACKMAN
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1000, 380.0]
     rotation: 0
     state: true
 - name: network_tcp_source_0
@@ -235,7 +292,7 @@ blocks:
     color9: '"red"'
     comment: ''
     grid: 'True'
-    gui_hint: ''
+    gui_hint: (2, 1, 1, 1)
     label1: ''
     label10: ''
     label2: ''
@@ -246,7 +303,7 @@ blocks:
     label7: ''
     label8: ''
     label9: ''
-    legend: 'True'
+    legend: 'False'
     marker1: '0'
     marker10: '0'
     marker2: '0'
@@ -295,70 +352,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1000, 272.0]
-    rotation: 0
-    state: true
-- name: qtgui_number_sink_1
-  id: qtgui_number_sink
-  parameters:
-    affinity: ''
-    alias: ''
-    autoscale: 'False'
-    avg: '0.001'
-    color1: ("black", "black")
-    color10: ("black", "black")
-    color2: ("black", "black")
-    color3: ("black", "black")
-    color4: ("black", "black")
-    color5: ("black", "black")
-    color6: ("black", "black")
-    color7: ("black", "black")
-    color8: ("black", "black")
-    color9: ("black", "black")
-    comment: ''
-    factor1: '1'
-    factor10: '1'
-    factor2: '1'
-    factor3: '1'
-    factor4: '1'
-    factor5: '1'
-    factor6: '1'
-    factor7: '1'
-    factor8: '1'
-    factor9: '1'
-    graph_type: qtgui.NUM_GRAPH_HORIZ
-    gui_hint: ''
-    label1: ''
-    label10: ''
-    label2: ''
-    label3: ''
-    label4: ''
-    label5: ''
-    label6: ''
-    label7: ''
-    label8: ''
-    label9: ''
-    max: '0'
-    min: '-60'
-    name: '"RSSI"'
-    nconnections: '1'
-    type: float
-    unit1: ''
-    unit10: ''
-    unit2: ''
-    unit3: ''
-    unit4: ''
-    unit5: ''
-    unit6: ''
-    unit7: ''
-    unit8: ''
-    unit9: ''
-    update_time: 1/30
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [1000, 400.0]
+    coordinate: [1000, 288.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0
@@ -390,12 +384,12 @@ blocks:
     color9: dark green
     comment: ''
     ctrlpanel: 'False'
-    entags: 'True'
-    grid: 'False'
-    gui_hint: ''
-    label1: Signal 1
+    entags: 'False'
+    grid: 'True'
+    gui_hint: (1, 0, 1, 1)
+    label1: I
     label10: Signal 10
-    label2: Signal 2
+    label2: Q
     label3: Signal 3
     label4: Signal 4
     label5: Signal 5
@@ -403,7 +397,7 @@ blocks:
     label7: Signal 7
     label8: Signal 8
     label9: Signal 9
-    legend: 'True'
+    legend: 'False'
     marker1: '-1'
     marker10: '-1'
     marker2: '-1'
@@ -414,7 +408,7 @@ blocks:
     marker7: '-1'
     marker8: '-1'
     marker9: '-1'
-    name: '""'
+    name: '"IQ"'
     nconnections: '1'
     size: int(samp_rate // 30)
     srate: samp_rate
@@ -455,7 +449,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 200.0]
+    coordinate: [704, 192.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0_0
@@ -487,10 +481,10 @@ blocks:
     color9: dark green
     comment: ''
     ctrlpanel: 'False'
-    entags: 'True'
-    grid: 'False'
-    gui_hint: ''
-    label1: Signal 1
+    entags: 'False'
+    grid: 'True'
+    gui_hint: (1, 1, 1, 1)
+    label1: "\u0394f"
     label10: Signal 10
     label2: Signal 2
     label3: Signal 3
@@ -500,7 +494,7 @@ blocks:
     label7: Signal 7
     label8: Signal 8
     label9: Signal 9
-    legend: 'True'
+    legend: 'False'
     marker1: '-1'
     marker10: '-1'
     marker2: '-1'
@@ -511,7 +505,7 @@ blocks:
     marker7: '-1'
     marker8: '-1'
     marker9: '-1'
-    name: '"FSK"'
+    name: '"FM Demodulation"'
     nconnections: '1'
     size: (samp_rate // 30)
     srate: samp_rate
@@ -544,15 +538,112 @@ blocks:
     width7: '1'
     width8: '1'
     width9: '1'
-    ylabel: Amplitude
-    ymax: '8'
-    ymin: '-8'
+    ylabel: Frequency Offset
+    ymax: '5'
+    ymin: '-5'
     yunit: '""'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
     coordinate: [1000, 544.0]
+    rotation: 0
+    state: true
+- name: qtgui_time_sink_x_0_0_0
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: ''
+    ctrlpanel: 'False'
+    entags: 'False'
+    grid: 'True'
+    gui_hint: (2, 0, 1, 1)
+    label1: RSSI
+    label10: Signal 10
+    label2: Signal 2
+    label3: Signal 3
+    label4: Signal 4
+    label5: Signal 5
+    label6: Signal 6
+    label7: Signal 7
+    label8: Signal 8
+    label9: Signal 9
+    legend: 'False'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    name: '"RSSI"'
+    nconnections: '1'
+    size: '1000'
+    srate: '1000'
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: float
+    update_time: 1/30
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: dBm
+    ymax: '0'
+    ymin: '-60'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1184, 408.0]
     rotation: 0
     state: true
 - name: qtgui_waterfall_sink_x_0_0
@@ -586,10 +677,10 @@ blocks:
     fc: '0'
     fftsize: '1024'
     freqhalf: 'True'
-    grid: 'False'
-    gui_hint: ''
-    int_max: '10'
-    int_min: '-140'
+    grid: 'True'
+    gui_hint: (0, 0, 1, 2)
+    int_max: '0'
+    int_min: '-90'
     label1: ''
     label10: ''
     label2: ''
@@ -613,7 +704,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 96.0]
+    coordinate: [704, 88.0]
     rotation: 0
     state: true
 
@@ -622,12 +713,15 @@ connections:
 - [blocks_complex_to_mag_squared_0, '0', blocks_nlog10_ff_0, '0']
 - [blocks_interleaved_char_to_complex_0, '0', analog_quadrature_demod_cf_0, '0']
 - [blocks_interleaved_char_to_complex_0, '0', blocks_complex_to_mag_squared_0, '0']
+- [blocks_interleaved_char_to_complex_0, '0', blocks_probe_rate_0, '0']
 - [blocks_interleaved_char_to_complex_0, '0', digital_costas_loop_cc_0, '0']
 - [blocks_interleaved_char_to_complex_0, '0', qtgui_time_sink_x_0, '0']
 - [blocks_interleaved_char_to_complex_0, '0', qtgui_waterfall_sink_x_0_0, '0']
-- [blocks_nlog10_ff_0, '0', qtgui_number_sink_1, '0']
+- [blocks_nlog10_ff_0, '0', low_pass_filter_1_0, '0']
+- [blocks_probe_rate_0, rate, blocks_message_debug_0, print]
 - [digital_costas_loop_cc_0, '0', qtgui_const_sink_x_0, '0']
 - [low_pass_filter_1, '0', qtgui_time_sink_x_0_0, '0']
+- [low_pass_filter_1_0, '0', qtgui_time_sink_x_0_0_0, '0']
 - [network_tcp_source_0, '0', blocks_interleaved_char_to_complex_0, '0']
 
 metadata:
