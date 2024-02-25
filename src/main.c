@@ -858,15 +858,22 @@ static void command(const char *cmd)
 		puts("Transmitting, press ENTER to stop.");
 
 		bool phase = false;
+		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
 
 		while (true) {
-			int c = getchar_timeout_us(1000);
+			int c = getchar_timeout_us(10000);
 
 			if ('\r' == c) {
 				break;
 			} else if (' ' == c) {
 				phase = !phase;
 				gpio_set_outover(n, phase);
+			} else if ('+' == c) {
+				actual = lo_freq_init(actual + step_hz);
+				printf("Frequency: %.0f\n", actual);
+			} else if ('-' == c) {
+				actual = lo_freq_init(actual - step_hz);
+				printf("Frequency: %.0f\n", actual);
 			}
 		}
 
