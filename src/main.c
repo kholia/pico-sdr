@@ -893,6 +893,12 @@ static void command(const char *cmd)
 			} else if ('-' == c) {
 				actual = rx_lo_init(actual - step_hz);
 				printf("Frequency: %.0f\n", actual);
+			} else if ((c >= '1') && (c <= '9')) {
+				for (int i = 0; i < 1000; i++) {
+					phase = !phase;
+					gpio_set_outover(n, phase);
+					sleep_us(1000 / (c - '0'));
+				}
 			}
 		}
 
@@ -932,6 +938,20 @@ static void command(const char *cmd)
 			} else if ('-' == c) {
 				f = tx_fsk_lo_init(f - step_hz, g);
 				printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
+			} else if ((c >= '1') && (c <= '9')) {
+				for (int i = 0; i < 1000; i++) {
+					high = !high;
+
+					if (high) {
+						dma_hw->ch[dma_ch_tx_cos].read_addr =
+							(uint32_t)lo_cos;
+					} else {
+						dma_hw->ch[dma_ch_tx_cos].read_addr =
+							(uint32_t)lo_sin;
+					}
+
+					sleep_us(1000 / (c - '0'));
+				}
 			}
 		}
 
