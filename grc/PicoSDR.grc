@@ -56,7 +56,7 @@ blocks:
   id: variable
   parameters:
     comment: ''
-    value: 1_024_000 // 64
+    value: 1_280_000 // 64
   states:
     bus_sink: false
     bus_source: false
