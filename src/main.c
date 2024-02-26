@@ -40,7 +40,6 @@
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 1024000
 #define DECIMATION 64
-#define LPF_SIZE DECIMATION
 
 #define IQ_BLOCK_LEN 64
 
@@ -550,27 +549,30 @@ static void rf_tx_stop()
 
 static void rf_rx(void)
 {
+	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION + 1;
+	const int amp_scale = INT_MAX / amp_max;
+
 	static int8_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
-	static int lpIh1[LPF_SIZE];
-	static int lpQh1[LPF_SIZE];
+	static int lpIh1[DECIMATION];
+	static int lpQh1[DECIMATION];
 	int lpIa1 = 0;
 	int lpQa1 = 0;
 
-	static int lpIh2[LPF_SIZE];
-	static int lpQh2[LPF_SIZE];
+	static int lpIh2[DECIMATION];
+	static int lpQh2[DECIMATION];
 	int lpIa2 = 0;
 	int lpQa2 = 0;
 
-	static int lpIh3[LPF_SIZE];
-	static int lpQh3[LPF_SIZE];
+	static int lpIh3[DECIMATION];
+	static int lpQh3[DECIMATION];
 	int lpIa3 = 0;
 	int lpQa3 = 0;
 
 	int64_t dcI = 0, dcQ = 0;
-	int64_t agc = 0;
+	int agc = 0;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -597,8 +599,8 @@ static void rf_rx(void)
 
 			pos = (pos + 2 * DECIMATION) & (RX_WORDS - 1);
 
-			int64_t dI = 0;
-			int64_t dQ = 0;
+			int dI = 0;
+			int dQ = 0;
 
 			for (int d = 0; d < DECIMATION; d++) {
 				uint32_t cos_pos = *cos_ptr++;
@@ -609,10 +611,11 @@ static void rf_rx(void)
 				int I = cos_neg - cos_pos;
 				int Q = sin_neg - sin_pos;
 
-				I <<= 8;
-				Q <<= 8;
+				/* Scale up before filtering. */
+				I = I * amp_scale;
+				Q = Q * amp_scale;
 
-				int lpP = d & (LPF_SIZE - 1);
+				int lpP = d & (DECIMATION - 1);
 
 				lpIa1 += I - lpIh1[lpP];
 				lpQa1 += Q - lpQh1[lpP];
@@ -620,8 +623,8 @@ static void rf_rx(void)
 				lpIh1[lpP] = I;
 				lpQh1[lpP] = Q;
 
-				I = lpIa1 / LPF_SIZE;
-				Q = lpQa1 / LPF_SIZE;
+				I = lpIa1 / DECIMATION;
+				Q = lpQa1 / DECIMATION;
 
 				lpIa2 += I - lpIh2[lpP];
 				lpQa2 += Q - lpQh2[lpP];
@@ -629,8 +632,8 @@ static void rf_rx(void)
 				lpIh2[lpP] = I;
 				lpQh2[lpP] = Q;
 
-				I = lpIa2 / LPF_SIZE;
-				Q = lpQa2 / LPF_SIZE;
+				I = lpIa2 / DECIMATION;
+				Q = lpQa2 / DECIMATION;
 
 				lpIa3 += I - lpIh3[lpP];
 				lpQa3 += Q - lpQh3[lpP];
@@ -638,35 +641,39 @@ static void rf_rx(void)
 				lpIh3[lpP] = I;
 				lpQh3[lpP] = Q;
 
-				I = lpIa3 / LPF_SIZE;
-				Q = lpQa3 / LPF_SIZE;
-
-				I >>= 8;
-				Q >>= 8;
+				I = lpIa3 / DECIMATION;
+				Q = lpQa3 / DECIMATION;
 
 				dI += I;
 				dQ += Q;
 			}
 
-			dcI = ((dcI << 13) - dcI + (dI << 19)) >> 13;
-			dcQ = ((dcQ << 13) - dcQ + (dQ << 19)) >> 13;
+			/*
+			 * Original dI/dQ are scaled to 32 bits.
+			 * These are part of DC removal alpha.
+			 */
+			int64_t dI19 = (int64_t)dI << 19;
+			int64_t dQ19 = (int64_t)dQ << 19;
 
-			dI = ((dI << 19) - dcI) >> 19;
-			dQ = ((dQ << 19) - dcQ) >> 19;
+			dcI = ((dcI << 13) - dcI + dI19) >> 13;
+			dcQ = ((dcQ << 13) - dcQ + dQ19) >> 13;
 
-			dI <<= 16;
-			dQ <<= 16;
+			dI = (dI19 - dcI) >> 19;
+			dQ = (dQ19 - dcQ) >> 19;
 
-			agc = (agc * UINT16_MAX) >> 16;
+			/* Slowly decay AGC amplitude. */
+			agc -= (agc >> 16) | 1;
 
-			if (llabs(dI) > agc)
-				agc = llabs(dI);
+			if (abs(dI) > agc)
+				agc = abs(dI);
 
-			if (llabs(dQ) > agc)
-				agc = llabs(dQ);
+			if (abs(dQ) > agc)
+				agc = abs(dQ);
 
-			*blockptr++ = 127 * dI / agc;
-			*blockptr++ = 127 * dQ / agc;
+			int agc_div = (agc >> 7) + (agc >> 14);
+
+			*blockptr++ = dI / agc_div;
+			*blockptr++ = dQ / agc_div;
 		}
 
 		if (!queue_try_add(&iq_queue, block)) {
