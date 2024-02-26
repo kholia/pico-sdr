@@ -1013,7 +1013,7 @@ static void command(const char *cmd)
 
 int main()
 {
-	vreg_set_voltage(VREG_VOLTAGE_MAX);
+	vreg_set_voltage(VREG_VOLTAGE_DEFAULT);
 	set_sys_clock_khz(CLK_SYS_HZ / KHZ, true);
 	clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, CLK_SYS_HZ,
 			CLK_SYS_HZ);
