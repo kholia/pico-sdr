@@ -570,7 +570,7 @@ static void rf_rx(void)
 	int lpQa3 = 0;
 
 	int64_t dcI = 0, dcQ = 0;
-	int64_t agc = 127;
+	int64_t agc = 0;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -654,10 +654,10 @@ static void rf_rx(void)
 			dI = ((dI << 19) - dcI) >> 19;
 			dQ = ((dQ << 19) - dcQ) >> 19;
 
-			dI <<= 32;
-			dQ <<= 32;
+			dI <<= 16;
+			dQ <<= 16;
 
-			agc -= (1 << 12) / DECIMATION * BANDWIDTH;
+			agc = (agc * UINT16_MAX) >> 16;
 
 			if (llabs(dI) > agc)
 				agc = llabs(dI);
