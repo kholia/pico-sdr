@@ -52,7 +52,7 @@
 static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
-#define RX_BITS_DEPTH 12
+#define RX_BITS_DEPTH 8
 #define RX_WORDS (1 << RX_BITS_DEPTH)
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
