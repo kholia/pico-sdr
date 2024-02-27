@@ -84,6 +84,8 @@ static int dma_ch_tx_cos = -1;
 static queue_t iq_queue;
 static int gap = 0;
 
+#define PSU_PIN 23
+
 static void bias_init(int in_pin, int out_pin)
 {
 	gpio_disable_pulls(in_pin);
@@ -1024,6 +1026,11 @@ int main()
 	set_sys_clock_khz(CLK_SYS_HZ / KHZ, true);
 	clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, CLK_SYS_HZ,
 			CLK_SYS_HZ);
+
+	/* Enable PSU PWM mode. */
+	gpio_init(PSU_PIN);
+	gpio_set_dir(PSU_PIN, GPIO_OUT);
+	gpio_put(PSU_PIN, 1);
 
 	bus_ctrl_hw->priority |= BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
 
