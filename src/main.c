@@ -551,7 +551,7 @@ static void rf_tx_stop()
 
 static void rf_rx(void)
 {
-	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION + 1;
+	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION + 16;
 	const int amp_scale = INT_MAX / amp_max;
 
 	static int8_t block[IQ_BLOCK_LEN];
