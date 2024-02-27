@@ -591,7 +591,7 @@ static void rf_rx(void)
 
 			while (delta < 2 * DECIMATION) {
 				delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-				sleep_us(100);
+				sleep_us(10);
 			}
 
 			prev_transfers -= 2 * DECIMATION;
