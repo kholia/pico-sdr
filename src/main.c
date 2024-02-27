@@ -83,6 +83,7 @@ static int dma_ch_tx_cos = -1;
 
 static queue_t iq_queue;
 static int gap = 0;
+static int agc = 0;
 
 #define PSU_PIN 23
 
@@ -574,7 +575,6 @@ static void rf_rx(void)
 	int lpQa3 = 0;
 
 	int64_t dcI = 0, dcQ = 0;
-	int agc = 0;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -798,10 +798,12 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 				fwrite(block, sizeof block, 1, stdout);
 				fflush(stdout);
 			} else {
+				float rssi = 10.0f * log10f(powf((float)agc / (float)INT_MAX, 2));
+
 				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 8) {
 					int I = block[i * 2];
 					int Q = block[i * 2 + 1];
-					printf("%2i %12i %12i ", gap, I, Q);
+					printf("%+4i %+4.0f %12i %12i ", gap, rssi, I, Q);
 					plot_IQ(I, Q);
 					putchar('\n');
 				}
