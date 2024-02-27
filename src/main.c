@@ -847,6 +847,7 @@ static void command(const char *cmd)
 		puts("brx N FREQ       - receive on pin N, binary output");
 		puts("bpsk N FREQ      - transmit on pin N with BPSK");
 		puts("fsk N FREQ       - transmit on pin N with FSK");
+		puts("ook N FREQ       - transmit on pin N with OOK");
 		puts("sweep N F G S    - sweep from F to G with given step");
 		puts("noise N          - transmit random noise");
 		return;
@@ -966,6 +967,45 @@ static void command(const char *cmd)
 		}
 
 		rf_tx_stop();
+		puts("Done.");
+		return;
+	}
+
+	if (3 == sscanf(cmd, " ook %i %f %[\a]", &n, &f, tmp)) {
+		float actual = rx_lo_init(f);
+		printf("Frequency: %.0f\n", actual);
+
+		rf_tx_start(n);
+		puts("Transmitting, press ENTER to stop.");
+
+		bool off = false;
+		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
+
+		while (true) {
+			int c = getchar_timeout_us(10000);
+
+			if ('\r' == c) {
+				break;
+			} else if (' ' == c) {
+				off = !off;
+				gpio_set_oeover(n, off * 2);
+			} else if ('+' == c) {
+				actual = rx_lo_init(actual + step_hz);
+				printf("Frequency: %.0f\n", actual);
+			} else if ('-' == c) {
+				actual = rx_lo_init(actual - step_hz);
+				printf("Frequency: %.0f\n", actual);
+			} else if ((c >= '1') && (c <= '9')) {
+				for (int i = 0; i < 1000; i++) {
+					off = !off;
+					gpio_set_oeover(n, off * 2);
+					sleep_us(1000 / (c - '0'));
+				}
+			}
+		}
+
+		rf_tx_stop();
+		gpio_set_oeover(n, 0);
 		puts("Done.");
 		return;
 	}
