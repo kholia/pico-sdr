@@ -693,40 +693,40 @@ static void __unused plot_IQ(int I, int Q)
 	int mag = I ? icopysign(32 - __builtin_clz(abs(I)), I) : 0;
 
 	if (mag < 0) {
-		for (int l = -mag; l < 16; l++)
+		for (int l = -mag; l < 8; l++)
 			putchar(' ');
 
 		for (int l = 0; l < -mag; l++)
 			putchar('#');
 
-		printf("%16s", "");
+		printf("%8s", "");
 	} else {
-		printf("%16s", "");
+		printf("%8s", "");
 
 		for (int l = 0; l < mag; l++)
 			putchar('#');
 
-		for (int l = mag; l < 16; l++)
+		for (int l = mag; l < 8; l++)
 			putchar(' ');
 	}
 
 	mag = Q ? icopysign(32 - __builtin_clz(abs(Q)), Q) : 0;
 
 	if (mag < 0) {
-		for (int l = -mag; l < 16; l++)
+		for (int l = -mag; l < 8; l++)
 			putchar(' ');
 
 		for (int l = 0; l < -mag; l++)
 			putchar('#');
 
-		printf("%16s", "");
+		printf("%8s", "");
 	} else {
-		printf("%16s", "");
+		printf("%8s", "");
 
 		for (int l = 0; l < mag; l++)
 			putchar('#');
 
-		for (int l = mag; l < 16; l++)
+		for (int l = mag; l < 8; l++)
 			putchar(' ');
 	}
 }
@@ -802,7 +802,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 8) {
 					int I = block[i * 2];
 					int Q = block[i * 2 + 1];
-					printf("%+4i %+4.0f %12i %12i ", gap, rssi, I, Q);
+					printf("%+4i | %+5.1f dBm | %+4i %+4i | ", gap, rssi, I, Q);
 					plot_IQ(I, Q);
 					putchar('\n');
 				}
