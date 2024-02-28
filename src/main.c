@@ -731,20 +731,6 @@ static void __unused plot_IQ(int I, int Q)
 	}
 }
 
-__unused inline static uint32_t ring_next(uint32_t **ptr, int dma_ch, int us)
-{
-	const unsigned ring_bits = (dma_hw->ch[dma_ch].al1_ctrl >> 6) & 15;
-	const uint32_t ring_mask = (1 << ring_bits) - 1;
-	uint32_t uptr = (uint32_t)*ptr;
-
-	while (uptr == dma_hw->ch[dma_ch].write_addr)
-		sleep_us(us);
-
-	uptr = (uptr & ~ring_mask) | ((uptr + sizeof(uint32_t)) & ring_mask);
-	*ptr = (uint32_t *)uptr;
-	return *(uint32_t *)uptr;
-}
-
 static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 {
 	float actual = rf_rx_start(rx_pin, bias_pin, freq, 1, CLK_SYS_HZ / BANDWIDTH);
