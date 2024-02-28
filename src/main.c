@@ -103,6 +103,9 @@ static void bias_init(int in_pin, int out_pin)
 
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
 
 	pio_program_t prog = {
