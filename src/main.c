@@ -39,9 +39,13 @@
 
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 1280000
-#define DECIMATION 64
-
+#define DECIMATION_BITS 6
 #define IQ_BLOCK_LEN 64
+
+#define RX_SLEEP_US (DECIMATION * BANDWIDTH / (1 * MHZ) / 4)
+#define DECIMATION (1 << DECIMATION_BITS)
+
+static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -52,15 +56,13 @@
 static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
-#define RX_BITS_DEPTH 8
+#define RX_BITS_DEPTH (DECIMATION_BITS + 2)
 #define RX_WORDS (1 << RX_BITS_DEPTH)
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 
 #define SIN_PHASE (UINT_MAX / 4)
 #define COS_PHASE (0)
-
-static_assert(RX_WORDS > 2 * DECIMATION, "RX buffers too short for given decimation");
 
 /* rx -> cp -> cos -> sin -> pio_cos -> pio_sin -> rx ... */
 static int dma_ch_rx = -1;
@@ -590,7 +592,7 @@ static void rf_rx(void)
 
 			while (delta < 2 * DECIMATION) {
 				delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-				sleep_us(10);
+				sleep_us(RX_SLEEP_US);
 			}
 
 			prev_transfers -= 2 * DECIMATION;
@@ -788,7 +790,8 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 8) {
 					int I = block[i * 2];
 					int Q = block[i * 2 + 1];
-					printf("%+4i | %+5.1f dBm | %+4i %+4i | ", gap, rssi, I, Q);
+					printf("%+4i | %+5.1f dBm | %+4i %+4i | ",
+					       RX_WORDS / 2 + gap, rssi, I, Q);
 					plot_IQ(I, Q);
 					putchar('\n');
 				}
