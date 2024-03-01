@@ -838,7 +838,7 @@ static void command(const char *cmd)
 		puts("help             - this help");
 		puts("drive N X        - set GPIO pin drive strength");
 		puts("bias I O         - output negated I to O");
-		puts("rx N FREQ        - receive on pin N");
+		puts("rx N B FREQ      - receive on pin N, biasing with pin B");
 		puts("brx N FREQ       - receive on pin N, binary output");
 		puts("bpsk N FREQ      - transmit on pin N with BPSK");
 		puts("fsk N FREQ       - transmit on pin N with FSK");
