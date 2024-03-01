@@ -556,8 +556,10 @@ static void rf_tx_stop()
 
 static void rf_rx(void)
 {
-	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION + 16;
-	const int amp_scale = INT_MAX / amp_max;
+	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION;
+
+	/* Scale down 2× to accomodate for jitter. */
+	const int amp_scale = INT_MAX / amp_max / 2;
 
 	static int8_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
@@ -788,7 +790,8 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 				fwrite(block, sizeof block, 1, stdout);
 				fflush(stdout);
 			} else {
-				float rssi = 10.0f * log10f(powf((float)agc / (float)INT_MAX, 2));
+				float rssi =
+					10.0f * log10f(powf((float)agc / (float)INT_MAX * 2, 2));
 
 				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 8) {
 					int I = block[i * 2];
