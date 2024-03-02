@@ -41,11 +41,14 @@
 #define BANDWIDTH 1280000
 #define DECIMATION_BITS 6
 #define IQ_BLOCK_LEN 64
+#define LPF_ORDER 3
+#define AGC_DECAY_BITS 16
 
 #define RX_SLEEP_US (DECIMATION * BANDWIDTH / (1 * MHZ) / 4)
 #define DECIMATION (1 << DECIMATION_BITS)
 
 static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
+static_assert(LPF_ORDER <= 3, "LPF_ORDER must be 0-3");
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -56,7 +59,11 @@ static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
 static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
 
+#if DECIMATION_BITS >= 5
 #define RX_BITS_DEPTH (DECIMATION_BITS + 2)
+#else
+#define RX_BITS_DEPTH 7
+#endif
 #define RX_WORDS (1 << RX_BITS_DEPTH)
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
@@ -565,20 +572,26 @@ static void rf_rx(void)
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
+#if LPF_ORDER >= 1
 	static int lpIh1[DECIMATION];
 	static int lpQh1[DECIMATION];
 	int lpIa1 = 0;
 	int lpQa1 = 0;
+#endif
 
+#if LPF_ORDER >= 2
 	static int lpIh2[DECIMATION];
 	static int lpQh2[DECIMATION];
 	int lpIa2 = 0;
 	int lpQa2 = 0;
+#endif
 
+#if LPF_ORDER >= 3
 	static int lpIh3[DECIMATION];
 	static int lpQh3[DECIMATION];
 	int lpIa3 = 0;
 	int lpQa3 = 0;
+#endif
 
 	int64_t dcI = 0, dcQ = 0;
 
@@ -623,6 +636,7 @@ static void rf_rx(void)
 				I = I * amp_scale;
 				Q = Q * amp_scale;
 
+#if LPF_ORDER >= 1
 				int lpP = d & (DECIMATION - 1);
 
 				lpIa1 += I - lpIh1[lpP];
@@ -633,7 +647,9 @@ static void rf_rx(void)
 
 				I = lpIa1 / DECIMATION;
 				Q = lpQa1 / DECIMATION;
+#endif
 
+#if LPF_ORDER >= 2
 				lpIa2 += I - lpIh2[lpP];
 				lpQa2 += Q - lpQh2[lpP];
 
@@ -642,7 +658,9 @@ static void rf_rx(void)
 
 				I = lpIa2 / DECIMATION;
 				Q = lpQa2 / DECIMATION;
+#endif
 
+#if LPF_ORDER >= 3
 				lpIa3 += I - lpIh3[lpP];
 				lpQa3 += Q - lpQh3[lpP];
 
@@ -651,6 +669,7 @@ static void rf_rx(void)
 
 				I = lpIa3 / DECIMATION;
 				Q = lpQa3 / DECIMATION;
+#endif
 
 				dI += I;
 				dQ += Q;
@@ -658,7 +677,7 @@ static void rf_rx(void)
 
 			/*
 			 * Original dI/dQ are scaled to 32 bits.
-			 * These are part of DC removal alpha.
+			 * These "<< 19" are part of DC removal alpha.
 			 */
 			int64_t dI19 = (int64_t)dI << 19;
 			int64_t dQ19 = (int64_t)dQ << 19;
@@ -670,7 +689,7 @@ static void rf_rx(void)
 			dQ = (dQ19 - dcQ) >> 19;
 
 			/* Slowly decay AGC amplitude. */
-			agc -= (agc >> 16) | 1;
+			agc -= (agc >> AGC_DECAY_BITS) | 1;
 
 			if (abs(dI) > agc)
 				agc = abs(dI);
