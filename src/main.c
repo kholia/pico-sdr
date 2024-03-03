@@ -37,18 +37,33 @@
 #include <limits.h>
 #include <stdlib.h>
 
+/* FM Radio */
+#if 1
+#define CLK_SYS_HZ (266 * MHZ)
+#define BANDWIDTH 1536000
+#define DECIMATION_BITS 3
+#define LPF_ORDER 2
+#define AGC_DECAY_BITS 20
+#define BIAS_STRENGTH 0
+#endif
+
+/* Digital Data */
+#if 0
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 1280000
 #define DECIMATION_BITS 6
-#define IQ_BLOCK_LEN 64
 #define LPF_ORDER 3
 #define AGC_DECAY_BITS 16
+#define BIAS_STRENGTH 5
+#endif
 
+#define IQ_BLOCK_LEN 64
 #define RX_SLEEP_US (DECIMATION * BANDWIDTH / (1 * MHZ) / 4)
 #define DECIMATION (1 << DECIMATION_BITS)
 
 static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
 static_assert(LPF_ORDER <= 3, "LPF_ORDER must be 0-3");
+static_assert(BIAS_STRENGTH >= 0 && BIAS_STRENGTH <= 9, "BIAS_STRENGTH must be 0-9");
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -111,6 +126,29 @@ static void bias_init(int in_pin, int out_pin)
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
+
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(0), /* 1 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(0), /* 2 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(1), /* 4 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(3), /* 8 */
+
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(7),  /* 16 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15), /* 32 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15), /* 48 */
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15), /* 64 */
+
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
@@ -118,7 +156,7 @@ static void bias_init(int in_pin, int out_pin)
 	pio_program_t prog = {
 		.instructions = insn,
 		.length = sizeof(insn) / sizeof(*insn),
-		.origin = 16,
+		.origin = 10,
 	};
 
 	pio_sm_set_enabled(pio1, 0, false);
@@ -134,7 +172,10 @@ static void bias_init(int in_pin, int out_pin)
 	sm_config_set_in_pins(&pc, in_pin);
 	sm_config_set_out_pins(&pc, out_pin, 1);
 	sm_config_set_set_pins(&pc, out_pin, 1);
-	sm_config_set_wrap(&pc, prog.origin, prog.origin + prog.length - 1);
+
+	int nops[10] = { 20, 12, 8, 6, 5, 4, 3, 2, 1, 0 };
+	sm_config_set_wrap(&pc, prog.origin, prog.origin + 1 + nops[BIAS_STRENGTH]);
+
 	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
 	pio_sm_init(pio1, 0, prog.origin, &pc);
 
@@ -156,7 +197,7 @@ static void watch_init(int in_pin)
 	pio_program_t prog = {
 		.instructions = insn,
 		.length = 1,
-		.origin = 31,
+		.origin = 6,
 	};
 
 	pio_sm_set_enabled(pio1, 1, false);
@@ -191,7 +232,7 @@ static void send_init(int out_pin)
 	pio_program_t prog = {
 		.instructions = insn,
 		.length = 1,
-		.origin = 30,
+		.origin = 5,
 	};
 
 	pio_sm_set_enabled(pio1, 1, false);
