@@ -39,6 +39,7 @@
 
 /* FM Radio */
 #if 1
+#define VREG_VOLTAGE VREG_VOLTAGE_1_20
 #define CLK_SYS_HZ (266 * MHZ)
 #define BANDWIDTH 1536000
 #define DECIMATION_BITS 3
@@ -49,6 +50,7 @@
 
 /* Digital Data */
 #if 0
+#define VREG_VOLTAGE VREG_VOLTAGE_DEFAULT
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 1280000
 #define DECIMATION_BITS 6
@@ -1119,7 +1121,7 @@ static void command(const char *cmd)
 
 int main()
 {
-	vreg_set_voltage(VREG_VOLTAGE_DEFAULT);
+	vreg_set_voltage(VREG_VOLTAGE);
 	set_sys_clock_khz(CLK_SYS_HZ / KHZ, true);
 	clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, CLK_SYS_HZ,
 			CLK_SYS_HZ);
