@@ -703,9 +703,7 @@ static void rf_rx(void)
 			*blockptr++ = dQ / agc_div;
 		}
 
-		if (!queue_try_add(&iq_queue, block)) {
-			puts("queue overflow");
-		}
+		(void)queue_try_add(&iq_queue, block);
 	}
 }
 
@@ -804,18 +802,21 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 		if ('\r' == c)
 			break;
 
+		bool overflow = queue_is_full(&iq_queue);
+
 		if (queue_try_remove(&iq_queue, block)) {
 			if ('b' == mode) {
 				fwrite(block, sizeof block, 1, stdout);
 				fflush(stdout);
 			} else {
-				float rssi =
-					10.0f * log10f(powf((float)agc / (float)INT_MAX * 2, 2));
+				/* Because AGC is kept 1 bit below to accomodate for jitter. */
+				float agc_frac = 2.0f * (float)agc / (float)INT_MAX;
+				float rssi = 10.0f * log10f(powf(agc_frac, 2));
 
-				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 8) {
-					int I = block[i * 2];
-					int Q = block[i * 2 + 1];
-					printf("%+4i | %+5.1f dBm | %+4i %+4i | ",
+				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 2) {
+					int I = block[i];
+					int Q = block[i + 1];
+					printf("%i %+4i | %+5.1f dBm | %+4i %+4i | ", overflow,
 					       RX_WORDS / 2 + gap, rssi, I, Q);
 					plot_IQ(I, Q);
 					putchar('\n');
