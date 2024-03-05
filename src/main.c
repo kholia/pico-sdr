@@ -59,7 +59,7 @@
 #define BIAS_STRENGTH 5
 #endif
 
-#define IQ_BLOCK_LEN 64
+#define IQ_BLOCK_LEN 32
 #define RX_SLEEP_US (DECIMATION * BANDWIDTH / (1 * MHZ) / 4)
 #define DECIMATION (1 << DECIMATION_BITS)
 
@@ -611,7 +611,7 @@ static void rf_rx(void)
 	/* Scale down 2× to accomodate for jitter. */
 	const int amp_scale = INT_MAX / amp_max / 2;
 
-	static int8_t block[IQ_BLOCK_LEN];
+	static int16_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
@@ -645,7 +645,7 @@ static void rf_rx(void)
 			return;
 		}
 
-		int8_t *blockptr = block;
+		int16_t *blockptr = block;
 
 		for (int i = 0; i < IQ_BLOCK_LEN / 2; i++) {
 			int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
@@ -740,7 +740,7 @@ static void rf_rx(void)
 			if (abs(dQ) > agc)
 				agc = abs(dQ);
 
-			int agc_div = (agc >> 7) + (agc >> 14);
+			int agc_div = (agc >> (8 + 7)) + (agc >> (8 + 14));
 
 			*blockptr++ = dI / agc_div;
 			*blockptr++ = dQ / agc_div;
@@ -830,7 +830,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 
 	printf("Frequency: %.0f\n", actual);
 
-	static int8_t block[IQ_BLOCK_LEN];
+	static int16_t block[IQ_BLOCK_LEN];
 
 	while (queue_try_remove(&iq_queue, block))
 		/* Flush the queue */;
@@ -1145,7 +1145,7 @@ int main()
 	printf("\nPuppet Online!\n");
 	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / MHZ);
 
-	queue_init(&iq_queue, IQ_BLOCK_LEN * sizeof(int8_t), 256);
+	queue_init(&iq_queue, IQ_BLOCK_LEN * sizeof(int16_t), 256);
 
 	static char cmd[83];
 	int cmdlen = 0;
