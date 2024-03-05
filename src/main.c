@@ -43,7 +43,7 @@
 #define CLK_SYS_HZ (266 * MHZ)
 #define BANDWIDTH 1536000
 #define DECIMATION_BITS 3
-#define LPF_ORDER 2
+#define LPF_ORDER 3
 #define AGC_DECAY_BITS 20
 #define BIAS_STRENGTH 0
 #endif
@@ -664,71 +664,68 @@ static void rf_rx(void)
 			pos = (pos + 2 * DECIMATION) & (RX_WORDS - 1);
 
 			int dI = 0;
-			int dQ = 0;
 
 			for (int d = 0; d < DECIMATION; d++) {
 				uint32_t cos_pos = *cos_ptr++;
 				uint32_t cos_neg = *cos_ptr++;
-				uint32_t sin_pos = *sin_ptr++;
-				uint32_t sin_neg = *sin_ptr++;
-
 				int I = cos_neg - cos_pos;
-				int Q = sin_neg - sin_pos;
-
-				/* Scale up before filtering. */
 				I = I * amp_scale;
-				Q = Q * amp_scale;
 
 #if LPF_ORDER >= 1
-				int lpP = d & (DECIMATION - 1);
-
-				lpIa1 += I - lpIh1[lpP];
-				lpQa1 += Q - lpQh1[lpP];
-
-				lpIh1[lpP] = I;
-				lpQh1[lpP] = Q;
-
+				lpIa1 += I - lpIh1[d];
+				lpIh1[d] = I;
 				I = lpIa1 / DECIMATION;
-				Q = lpQa1 / DECIMATION;
 #endif
-
 #if LPF_ORDER >= 2
-				lpIa2 += I - lpIh2[lpP];
-				lpQa2 += Q - lpQh2[lpP];
-
-				lpIh2[lpP] = I;
-				lpQh2[lpP] = Q;
-
+				lpIa2 += I - lpIh2[d];
+				lpIh2[d] = I;
 				I = lpIa2 / DECIMATION;
-				Q = lpQa2 / DECIMATION;
 #endif
-
 #if LPF_ORDER >= 3
-				lpIa3 += I - lpIh3[lpP];
-				lpQa3 += Q - lpQh3[lpP];
-
-				lpIh3[lpP] = I;
-				lpQh3[lpP] = Q;
-
+				lpIa3 += I - lpIh3[d];
+				lpIh3[d] = I;
 				I = lpIa3 / DECIMATION;
-				Q = lpQa3 / DECIMATION;
 #endif
-
 				dI += I;
-				dQ += Q;
 			}
+
+			int dQ = 0;
 
 			/*
 			 * Original dI/dQ are scaled to 32 bits.
 			 * These "<< 19" are part of DC removal alpha.
 			 */
 			int64_t dI19 = (int64_t)dI << 19;
-			int64_t dQ19 = (int64_t)dQ << 19;
-
 			dcI = ((dcI << 13) - dcI + dI19) >> 13;
-			dcQ = ((dcQ << 13) - dcQ + dQ19) >> 13;
-
 			dI = (dI19 - dcI) >> 19;
+
+			for (int d = 0; d < DECIMATION; d++) {
+				uint32_t sin_pos = *sin_ptr++;
+				uint32_t sin_neg = *sin_ptr++;
+				int Q = sin_neg - sin_pos;
+				Q = Q * amp_scale;
+
+#if LPF_ORDER >= 1
+				lpQa1 += Q - lpQh1[d];
+				lpQh1[d] = Q;
+				Q = lpQa1 / DECIMATION;
+#endif
+#if LPF_ORDER >= 2
+				lpQa2 += Q - lpQh2[d];
+				lpQh2[d] = Q;
+
+				Q = lpQa2 / DECIMATION;
+#endif
+#if LPF_ORDER >= 3
+				lpQa3 += Q - lpQh3[d];
+				lpQh3[d] = Q;
+				Q = lpQa3 / DECIMATION;
+#endif
+				dQ += Q;
+			}
+
+			int64_t dQ19 = (int64_t)dQ << 19;
+			dcQ = ((dcQ << 13) - dcQ + dQ19) >> 13;
 			dQ = (dQ19 - dcQ) >> 19;
 
 			/* Slowly decay AGC amplitude. */
