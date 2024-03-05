@@ -40,10 +40,10 @@
 /* FM Radio */
 #if 1
 #define VREG_VOLTAGE VREG_VOLTAGE_1_20
-#define CLK_SYS_HZ (266 * MHZ)
+#define CLK_SYS_HZ (300 * MHZ)
 #define BANDWIDTH 1536000
 #define DECIMATION_BITS 3
-#define LPF_ORDER 3
+#define LPF_ORDER 4
 #define AGC_DECAY_BITS 20
 #define BIAS_STRENGTH 0
 #endif
@@ -64,7 +64,7 @@
 #define DECIMATION (1 << DECIMATION_BITS)
 
 static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
-static_assert(LPF_ORDER <= 3, "LPF_ORDER must be 0-3");
+static_assert(LPF_ORDER <= 4, "LPF_ORDER must be 0-4");
 static_assert(BIAS_STRENGTH >= 0 && BIAS_STRENGTH <= 9, "BIAS_STRENGTH must be 0-9");
 
 #define XOR_ADDR 0x1000
@@ -636,6 +636,13 @@ static void rf_rx(void)
 	int lpQa3 = 0;
 #endif
 
+#if LPF_ORDER >= 4
+	static int lpIh4[DECIMATION];
+	static int lpQh4[DECIMATION];
+	int lpIa4 = 0;
+	int lpQa4 = 0;
+#endif
+
 	int64_t dcI = 0, dcQ = 0;
 
 	while (true) {
@@ -686,6 +693,11 @@ static void rf_rx(void)
 				lpIh3[d] = I;
 				I = lpIa3 / DECIMATION;
 #endif
+#if LPF_ORDER >= 4
+				lpIa4 += I - lpIh4[d];
+				lpIh4[d] = I;
+				I = lpIa4 / DECIMATION;
+#endif
 				dI += I;
 			}
 
@@ -720,6 +732,11 @@ static void rf_rx(void)
 				lpQa3 += Q - lpQh3[d];
 				lpQh3[d] = Q;
 				Q = lpQa3 / DECIMATION;
+#endif
+#if LPF_ORDER >= 4
+				lpQa4 += Q - lpQh4[d];
+				lpQh4[d] = Q;
+				Q = lpQa4 / DECIMATION;
 #endif
 				dQ += Q;
 			}
