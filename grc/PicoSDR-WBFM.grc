@@ -85,7 +85,7 @@ blocks:
   parameters:
     affinity: ''
     alias: ''
-    audio_decimation: '1'
+    audio_decimation: '4'
     comment: ''
     deemph_tau: 75e-6
     maxoutbuf: '0'
@@ -95,7 +95,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [456, 408.0]
+    coordinate: [456, 376.0]
     rotation: 0
     state: true
 - name: audio_sink_0
@@ -112,7 +112,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [992, 384.0]
+    coordinate: [704, 384.0]
     rotation: 0
     state: true
 - name: blocks_add_xx_0
@@ -130,7 +130,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [992, 456.0]
+    coordinate: [704, 456.0]
     rotation: 0
     state: true
 - name: blocks_interleaved_short_to_complex_0
@@ -195,54 +195,6 @@ blocks:
     bus_source: false
     bus_structure: null
     coordinate: [440, 8.0]
-    rotation: 0
-    state: true
-- name: low_pass_filter_0
-  id: low_pass_filter
-  parameters:
-    affinity: ''
-    alias: ''
-    beta: '6.76'
-    comment: ''
-    cutoff_freq: '22_000'
-    decim: '4'
-    gain: '1'
-    interp: '1'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samp_rate: samp_rate
-    type: fir_filter_fff
-    width: '2_000'
-    win: window.WIN_HAMMING
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [704, 356.0]
-    rotation: 0
-    state: true
-- name: low_pass_filter_0_0
-  id: low_pass_filter
-  parameters:
-    affinity: ''
-    alias: ''
-    beta: '6.76'
-    comment: ''
-    cutoff_freq: '22_000'
-    decim: '4'
-    gain: '1'
-    interp: '1'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    samp_rate: samp_rate
-    type: fir_filter_fff
-    width: '2_000'
-    win: window.WIN_HAMMING
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [704, 516.0]
     rotation: 0
     state: true
 - name: network_tcp_source_0
@@ -578,7 +530,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1152, 440.0]
+    coordinate: [864, 440.0]
     rotation: 0
     state: true
 - name: qtgui_waterfall_sink_x_0_0_0_0
@@ -646,8 +598,10 @@ blocks:
 connections:
 - [analog_quadrature_demod_cf_0, '0', qtgui_time_sink_x_0_0, '0']
 - [analog_quadrature_demod_cf_0, '0', qtgui_waterfall_sink_x_0_0_0_0, '0']
-- [analog_wfm_rcv_pll_0, '0', low_pass_filter_0, '0']
-- [analog_wfm_rcv_pll_0, '1', low_pass_filter_0_0, '0']
+- [analog_wfm_rcv_pll_0, '0', audio_sink_0, '0']
+- [analog_wfm_rcv_pll_0, '0', blocks_add_xx_0, '0']
+- [analog_wfm_rcv_pll_0, '1', audio_sink_0, '1']
+- [analog_wfm_rcv_pll_0, '1', blocks_add_xx_0, '1']
 - [blocks_add_xx_0, '0', qtgui_waterfall_sink_x_0_0_0, '0']
 - [blocks_interleaved_short_to_complex_0, '0', analog_quadrature_demod_cf_0, '0']
 - [blocks_interleaved_short_to_complex_0, '0', analog_wfm_rcv_pll_0, '0']
@@ -655,10 +609,6 @@ connections:
 - [blocks_interleaved_short_to_complex_0, '0', qtgui_time_sink_x_0, '0']
 - [blocks_interleaved_short_to_complex_0, '0', qtgui_waterfall_sink_x_0_0, '0']
 - [blocks_probe_rate_0, rate, blocks_message_debug_0, print]
-- [low_pass_filter_0, '0', audio_sink_0, '0']
-- [low_pass_filter_0, '0', blocks_add_xx_0, '0']
-- [low_pass_filter_0_0, '0', audio_sink_0, '1']
-- [low_pass_filter_0_0, '0', blocks_add_xx_0, '1']
 - [network_tcp_source_0, '0', blocks_interleaved_short_to_complex_0, '0']
 
 metadata:
