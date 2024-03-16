@@ -151,8 +151,9 @@ static void bias_init(int in_pin, int out_pin)
 
 		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
-		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
-		pio_encode_nop() | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+
+		pio_encode_set(pio_x, 7) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_jmp_x_dec(21) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
 
 	pio_program_t prog = {
