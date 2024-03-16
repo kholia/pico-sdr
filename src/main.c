@@ -873,7 +873,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 2) {
 					int I = block[i] >> 8;
 					int Q = block[i + 1] >> 8;
-					printf("%i %+4i | %+5.1f dBm | %+4i %+4i | ", overflow,
+					printf("%i %+5i | %+5.1f dBm | %+4i %+4i | ", overflow,
 					       RX_WORDS / 2 + gap, rssi, I, Q);
 					plot_IQ(I, Q);
 					putchar('\n');
