@@ -369,8 +369,8 @@ blocks:
     marker9: '-1'
     name: '"FM Demodulation"'
     nconnections: '1'
-    size: int(samp_rate // 2 // 30)
-    srate: samp_rate // 2
+    size: int(samp_rate // 30)
+    srate: samp_rate
     stemplot: 'False'
     style1: '1'
     style10: '1'
