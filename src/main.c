@@ -54,9 +54,9 @@
 #define CLK_SYS_HZ (250 * MHZ)
 #define BANDWIDTH 1280000
 #define DECIMATION_BITS 6
-#define LPF_ORDER 3
+#define LPF_ORDER 4
 #define AGC_DECAY_BITS 16
-#define BIAS_STRENGTH 5
+#define BIAS_STRENGTH 3
 #endif
 
 #define IQ_BLOCK_LEN 32

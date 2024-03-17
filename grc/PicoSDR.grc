@@ -77,18 +77,19 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [712, 496.0]
+    coordinate: [704, 496.0]
     rotation: 0
     state: true
-- name: blocks_interleaved_char_to_complex_0
-  id: blocks_interleaved_char_to_complex
+- name: blocks_interleaved_short_to_complex_0
+  id: blocks_interleaved_short_to_complex
   parameters:
     affinity: ''
     alias: ''
     comment: ''
     maxoutbuf: '0'
     minoutbuf: '0'
-    scale_factor: '127'
+    scale_factor: (1 << 15) - 1
+    swap: 'False'
     vector_input: 'False'
   states:
     bus_sink: false
@@ -172,7 +173,7 @@ blocks:
     minoutbuf: '0'
     port: '1234'
     server: 'True'
-    type: byte
+    type: short
     vlen: '1'
   states:
     bus_sink: false
@@ -598,7 +599,7 @@ blocks:
     grid: 'True'
     gui_hint: (0, 0, 1, 2)
     int_max: '0'
-    int_min: '-90'
+    int_min: 10 * math.log10(1 / ((2 ** 15 - 1) ** 2))
     label1: ''
     label10: ''
     label2: ''
@@ -628,15 +629,15 @@ blocks:
 
 connections:
 - [analog_quadrature_demod_cf_0, '0', qtgui_time_sink_x_0_0, '0']
-- [blocks_interleaved_char_to_complex_0, '0', analog_quadrature_demod_cf_0, '0']
-- [blocks_interleaved_char_to_complex_0, '0', blocks_probe_rate_0, '0']
-- [blocks_interleaved_char_to_complex_0, '0', digital_costas_loop_cc_0, '0']
-- [blocks_interleaved_char_to_complex_0, '0', qtgui_time_sink_x_0, '0']
-- [blocks_interleaved_char_to_complex_0, '0', qtgui_waterfall_sink_x_0_0, '0']
+- [blocks_interleaved_short_to_complex_0, '0', analog_quadrature_demod_cf_0, '0']
+- [blocks_interleaved_short_to_complex_0, '0', blocks_probe_rate_0, '0']
+- [blocks_interleaved_short_to_complex_0, '0', digital_costas_loop_cc_0, '0']
+- [blocks_interleaved_short_to_complex_0, '0', qtgui_time_sink_x_0, '0']
+- [blocks_interleaved_short_to_complex_0, '0', qtgui_waterfall_sink_x_0_0, '0']
 - [blocks_probe_rate_0, rate, blocks_message_debug_0, print]
 - [digital_costas_loop_cc_0, '0', qtgui_const_sink_x_0, '0']
 - [digital_costas_loop_cc_0, '0', qtgui_time_sink_x_0_1, '0']
-- [network_tcp_source_0, '0', blocks_interleaved_char_to_complex_0, '0']
+- [network_tcp_source_0, '0', blocks_interleaved_short_to_complex_0, '0']
 
 metadata:
   file_format: 1
