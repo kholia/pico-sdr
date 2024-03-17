@@ -45,7 +45,7 @@
 #define DECIMATION_BITS 3
 #define LPF_ORDER 4
 #define AGC_DECAY_BITS 20
-#define BIAS_STRENGTH 3
+#define BIAS_STRENGTH 0
 #endif
 
 /* Digital Data */
