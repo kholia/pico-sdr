@@ -9,10 +9,10 @@ import serial
 
 
 @click.command()
-@click.option(
-    "-f", "--frequency", default=40680000, type=int, help="Frequency to tune to"
-)
-def bridge(frequency):
+@click.option("-f", "--frequency", default=40680000, help="Frequency to tune to")
+@click.option("--rx", default=10, help="Receive pin")
+@click.option("--bias", default=11, help="Bias pin")
+def bridge(frequency, rx, bias):
     sock = socket(AF_INET, SOCK_STREAM)
     sock.setsockopt(SOL_SOCKET, SO_SNDBUF, 1024 * 100)
 
@@ -29,8 +29,8 @@ def bridge(frequency):
         print("Connecting to localhost:1234...")
         sock.connect(("localhost", 1234))
 
-        print(f"Starting RX 10/11 at {frequency}...")
-        fp.write(f"brx 10 11 {frequency}\r\n".encode("ascii"))
+        print(f"Starting RX {rx}/{bias} at {frequency}...")
+        fp.write(f"brx {rx} {bias} {frequency}\r\n".encode("ascii"))
         fp.read_until(b"$")
 
         try:
