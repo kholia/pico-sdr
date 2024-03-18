@@ -46,6 +46,7 @@
 #define LPF_ORDER 4
 #define AGC_DECAY_BITS 20
 #define BIAS_STRENGTH 0
+#define LO_DITHER 0
 #endif
 
 /* Digital Data */
@@ -57,6 +58,7 @@
 #define LPF_ORDER 4
 #define AGC_DECAY_BITS 16
 #define BIAS_STRENGTH 3
+#define LO_DITHER 1
 #endif
 
 #define IQ_BLOCK_LEN 32
@@ -318,7 +320,15 @@ static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
 		unsigned bits = 0;
 
 		for (int j = 0; j < 32; j++) {
+#if LO_DITHER
+			int n0 = rand() - RAND_MAX / 2;
+			int n1 = rand() - RAND_MAX / 2;
+			int noise = (n0 + n1) / 2;
+
+			bits |= (accum + noise) >> 31;
+#else
 			bits |= accum >> 31;
+#endif
 			bits <<= 1;
 			accum += step;
 		}
