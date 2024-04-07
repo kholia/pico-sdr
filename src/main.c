@@ -52,7 +52,7 @@
 /* Digital Data */
 #if 0
 #define VREG_VOLTAGE VREG_VOLTAGE_DEFAULT
-#define CLK_SYS_HZ (250 * MHZ)
+#define CLK_SYS_HZ (252 * MHZ)
 #define BANDWIDTH 1280000
 #define DECIMATION_BITS 6
 #define LPF_ORDER 4
