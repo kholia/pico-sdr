@@ -45,7 +45,7 @@
 #define DECIMATION_BITS 3
 #define LPF_ORDER 4
 #define AGC_DECAY_BITS 20
-#define LO_DITHER 0
+#define LO_DITHER 1
 #endif
 
 /* Digital Data */

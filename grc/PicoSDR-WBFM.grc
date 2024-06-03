@@ -281,7 +281,7 @@ blocks:
     marker9: '-1'
     name: '"IQ"'
     nconnections: '1'
-    size: min(int(samp_rate // 30), 512)
+    size: '128'
     srate: samp_rate
     stemplot: 'False'
     style1: '1'
@@ -449,7 +449,7 @@ blocks:
     color9: '0'
     comment: ''
     fc: '0'
-    fftsize: '1024'
+    fftsize: '2048'
     freqhalf: 'True'
     grid: 'True'
     gui_hint: (0, 0, 1, 2)
@@ -481,67 +481,6 @@ blocks:
     coordinate: [704, 104.0]
     rotation: 0
     state: true
-- name: qtgui_waterfall_sink_x_0_0_0
-  id: qtgui_waterfall_sink_x
-  parameters:
-    affinity: ''
-    alias: ''
-    alpha1: '1.0'
-    alpha10: '1.0'
-    alpha2: '1.0'
-    alpha3: '1.0'
-    alpha4: '1.0'
-    alpha5: '1.0'
-    alpha6: '1.0'
-    alpha7: '1.0'
-    alpha8: '1.0'
-    alpha9: '1.0'
-    axislabels: 'True'
-    bw: samp_rate // 2
-    color1: '0'
-    color10: '0'
-    color2: '0'
-    color3: '0'
-    color4: '0'
-    color5: '0'
-    color6: '0'
-    color7: '0'
-    color8: '0'
-    color9: '0'
-    comment: ''
-    fc: '0'
-    fftsize: '1024'
-    freqhalf: 'True'
-    grid: 'True'
-    gui_hint: (4, 0, 1, 2)
-    int_max: '0'
-    int_min: 10 * math.log10(1 / ((2 ** 15 - 1) ** 2))
-    label1: ''
-    label10: ''
-    label2: ''
-    label3: ''
-    label4: ''
-    label5: ''
-    label6: ''
-    label7: ''
-    label8: ''
-    label9: ''
-    legend: 'True'
-    maxoutbuf: '0'
-    minoutbuf: '0'
-    name: '"Audio"'
-    nconnections: '2'
-    showports: 'False'
-    type: float
-    update_time: 1/30
-    wintype: window.WIN_BLACKMAN_hARRIS
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [704, 456.0]
-    rotation: 0
-    state: true
 - name: qtgui_waterfall_sink_x_0_0_0_0
   id: qtgui_waterfall_sink_x
   parameters:
@@ -571,7 +510,7 @@ blocks:
     color9: '0'
     comment: ''
     fc: '0'
-    fftsize: '1024'
+    fftsize: '2048'
     freqhalf: 'True'
     grid: 'True'
     gui_hint: (3, 0, 1, 2)
@@ -608,9 +547,7 @@ connections:
 - [analog_quadrature_demod_cf_0, '0', low_pass_filter_0, '0']
 - [analog_quadrature_demod_cf_0, '0', qtgui_waterfall_sink_x_0_0_0_0, '0']
 - [analog_wfm_rcv_pll_0, '0', audio_sink_0, '0']
-- [analog_wfm_rcv_pll_0, '0', qtgui_waterfall_sink_x_0_0_0, '0']
 - [analog_wfm_rcv_pll_0, '1', audio_sink_0, '1']
-- [analog_wfm_rcv_pll_0, '1', qtgui_waterfall_sink_x_0_0_0, '1']
 - [blocks_interleaved_short_to_complex_0, '0', analog_quadrature_demod_cf_0, '0']
 - [blocks_interleaved_short_to_complex_0, '0', analog_wfm_rcv_pll_0, '0']
 - [blocks_interleaved_short_to_complex_0, '0', blocks_probe_rate_0, '0']
