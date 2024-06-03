@@ -40,6 +40,7 @@ blocks:
     const_points: '[-1-1j, -1+1j, 1+1j, 1-1j]'
     dims: '1'
     normalization: digital.constellation.AMPLITUDE_NORMALIZATION
+    npwr: '1.0'
     precision: '8'
     rot_sym: '4'
     soft_dec_lut: None
@@ -77,7 +78,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 496.0]
+    coordinate: [704, 512.0]
     rotation: 0
     state: true
 - name: blocks_interleaved_short_to_complex_0
@@ -105,6 +106,7 @@ blocks:
     alias: ''
     comment: ''
     en_uvec: 'True'
+    log_level: info
   states:
     bus_sink: false
     bus_source: false
@@ -122,6 +124,7 @@ blocks:
     maxoutbuf: '0'
     minoutbuf: '0'
     mintime: '1000'
+    name: ''
     type: complex
     vlen: '1'
   states:
@@ -146,7 +149,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 304.0]
+    coordinate: [704, 320.0]
     rotation: 0
     state: true
 - name: import_0
@@ -235,7 +238,7 @@ blocks:
     marker9: '0'
     name: '""'
     nconnections: '1'
-    size: int(samp_rate // 30)
+    size: '256'
     style1: '0'
     style10: '0'
     style2: '0'
@@ -271,7 +274,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1000, 288.0]
+    coordinate: [1000, 304.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0
@@ -329,7 +332,7 @@ blocks:
     marker9: '-1'
     name: '"IQ"'
     nconnections: '1'
-    size: int(samp_rate // 30)
+    size: '256'
     srate: samp_rate
     stemplot: 'False'
     style1: '1'
@@ -368,7 +371,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 192.0]
+    coordinate: [704, 208.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0_0
@@ -426,7 +429,7 @@ blocks:
     marker9: '-1'
     name: '"FM Demodulation"'
     nconnections: '1'
-    size: (samp_rate // 30)
+    size: '256'
     srate: samp_rate
     stemplot: 'False'
     style1: '1'
@@ -465,7 +468,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1000, 472.0]
+    coordinate: [1000, 488.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0_1
@@ -523,7 +526,7 @@ blocks:
     marker9: '-1'
     name: '"IQ / Loop"'
     nconnections: '1'
-    size: int(samp_rate // 30)
+    size: '256'
     srate: samp_rate
     stemplot: 'False'
     style1: '1'
@@ -562,7 +565,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1000, 360.0]
+    coordinate: [1000, 376.0]
     rotation: 0
     state: true
 - name: qtgui_waterfall_sink_x_0_0
@@ -623,7 +626,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 88.0]
+    coordinate: [704, 104.0]
     rotation: 0
     state: true
 
@@ -641,4 +644,4 @@ connections:
 
 metadata:
   file_format: 1
-  grc_version: 3.10.6.0
+  grc_version: 3.10.9.2
