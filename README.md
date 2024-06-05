@@ -4,6 +4,12 @@ Using RP2040 / Raspberry Pi Pico as a software-defined radio receiver.
 
 See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatiom.
 
+## Circuit
+
+![](circuit.svg)
+
+## Firmware
+
 1. Clone using `git clone --recursive` as this package is using a custom USB
    stdio library for better throughput and to avoid deadlocks.
 
