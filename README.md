@@ -8,7 +8,7 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
 
 ![](circuit.svg)
 
-## Firmware
+## Software
 
 1. Clone using `git clone --recursive` as this package is using a custom USB
    stdio library for better throughput and to avoid deadlocks.
