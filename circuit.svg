@@ -1,33 +1,33 @@
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="252" height="372">
   <g transform="translate(-874,-110)">
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 320 L 944 364" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 956 364 L 932 364" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 416 L 944 372" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 956 372 L 932 372" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <text fill="#777" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="958" y="374" text-anchor="start" dominant-baseline="alphabetic">100nF</text>
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 416 L 944 432" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 954 432 L 934 432" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 950 437 L 938 437" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 946 442 L 942 442" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 320 L 944 288" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 256 L 944 224" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 320 L 944 364" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 956 364 L 932 364" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 416 L 944 372" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 956 372 L 932 372" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <text fill="#d7aa13" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="958" y="374" text-anchor="start" dominant-baseline="alphabetic">100nF</text>
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 416 L 944 432" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 954 432 L 934 432" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 950 437 L 938 437" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 946 442 L 942 442" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 320 L 944 288" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 256 L 944 224" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
     <g transform="matrix(0,-1,1,0,944,288)">
-      <rect fill="none" stroke="#777" x="0" y="-6" width="32" height="12" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+      <rect fill="none" stroke="#d7aa13" x="0" y="-6" width="32" height="12" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
     </g>
-    <text fill="#777" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="954" y="278" text-anchor="start" dominant-baseline="alphabetic">1MΩ</text>
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 224 L 1039 224" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <text fill="#d7aa13" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="954" y="278" text-anchor="start" dominant-baseline="alphabetic">1MΩ</text>
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 224 L 1039 224" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
     <g>
-      <text fill="#777" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="1043" y="224" text-anchor="start" dominant-baseline="central">GPIO 10</text>
+      <text fill="#d7aa13" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="1043" y="224" text-anchor="start" dominant-baseline="central">GPIO 10</text>
     </g>
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 320 L 1039 320" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 320 L 1039 320" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
     <g>
-      <text fill="#777" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="1043" y="320" text-anchor="start" dominant-baseline="central">GPIO 11</text>
+      <text fill="#d7aa13" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="1043" y="320" text-anchor="start" dominant-baseline="central">GPIO 11</text>
     </g>
-    <path fill="none" stroke="#777" paint-order="fill stroke markers" d="M 944 224 L 944 177" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
+    <path fill="none" stroke="#d7aa13" paint-order="fill stroke markers" d="M 944 224 L 944 177" stroke-linecap="round" stroke-miterlimit="10" stroke-width="3" stroke-dasharray="" />
     <g>
-      <text fill="#777" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="932" y="165" text-anchor="start" dominant-baseline="central">ANT</text>
+      <text fill="#d7aa13" stroke="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" text-decoration="normal" x="932" y="165" text-anchor="start" dominant-baseline="central">ANT</text>
     </g>
-    <path fill="#777" stroke="none" paint-order="stroke fill markers" d="M 947 320 A 3 3 0 1 1 946.9997392252899 319.9604452245994 Z" />
-    <path fill="#777" stroke="none" paint-order="stroke fill markers" d="M 947 224 A 3 3 0 1 1 946.9997392252899 223.96044522459943 Z" />
+    <path fill="#d7aa13" stroke="none" paint-order="stroke fill markers" d="M 947 320 A 3 3 0 1 1 946.9997392252899 319.9604452245994 Z" />
+    <path fill="#d7aa13" stroke="none" paint-order="stroke fill markers" d="M 947 224 A 3 3 0 1 1 946.9997392252899 223.96044522459943 Z" />
   </g>
 </svg>
