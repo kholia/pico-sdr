@@ -476,8 +476,9 @@ static void rf_rx(void)
 			int I32 = cos_neg - cos_pos;
 			int64_t I = I32;
 
-			dcI = ((dcI << 16) - dcI + (I << 16)) >> 16;
-			I -= dcI >> 16;
+			int64_t I16 = I << 16;
+			dcI = ((dcI << 16) - dcI + I16) >> 16;
+			I = (I16 - dcI) >> 16;
 
 			I *= gain;
 			I /= max_amplitude;
@@ -489,8 +490,9 @@ static void rf_rx(void)
 			int Q32 = sin_neg - sin_pos;
 			int64_t Q = Q32;
 
-			dcQ = ((dcQ << 16) - dcQ + (Q << 16)) >> 16;
-			Q -= dcQ >> 16;
+			int64_t Q16 = Q << 16;
+			dcQ = ((dcQ << 16) - dcQ + Q16) >> 16;
+			Q = (Q16 - dcQ) >> 16;
 
 			Q *= gain;
 			Q /= max_amplitude;
