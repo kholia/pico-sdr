@@ -40,11 +40,15 @@ static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(1 << LO_BITS_DEPTH))
 #define RX_STRIDE (2 * IQ_SAMPLES)
 #define RX_BITS_DEPTH 12
 #define RX_WORDS (1 << (RX_BITS_DEPTH - 2))
+
+static_assert(RX_STRIDE * 4 < RX_WORDS, "RX_STRIDE * 4 < RX_WORDS");
+
 static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(1 << RX_BITS_DEPTH)));
 static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(1 << RX_BITS_DEPTH)));
 
-#define INIT_GAIN 256
+#define INIT_GAIN 120
 #define INIT_SAMPLE_RATE 100000
+#define INIT_FREQ 94600000
 
 #define NUM_GAINS 29
 static int gains[NUM_GAINS] = { 0,   9,	  14,  27,  37,	 77,  87,  125, 144, 157,
@@ -457,11 +461,13 @@ static void rf_rx(void)
 
 		/*
 		 * Since the waveform is normally half of the time
-		 * above zero, we could halve once more.
+		 * above zero, we can halve once more.
 		 *
-		 * Instead we use 2/3 to provide 1/3 reserve.
+		 * This is not perfect, so we do not max out the base
+		 * gain but keep it slightly below the maximum to make
+		 * sure we do not overshoot often.
 		 */
-		max_amplitude = max_amplitude * 2 / 3;
+		max_amplitude = max_amplitude / 2;
 
 		/*
 		 * We are allowing the counters to only go as high
@@ -482,6 +488,11 @@ static void rf_rx(void)
 			I *= gain;
 			I /= max_amplitude;
 
+			if (I > 127)
+				I = 127;
+			else if (I < -128)
+				I = -128;
+
 			*blockptr++ = I + 128;
 
 			uint32_t sin_neg = *sin_ptr++;
@@ -496,7 +507,12 @@ static void rf_rx(void)
 			Q *= gain;
 			Q /= max_amplitude;
 
-			*blockptr++ = Q + 128;
+			if (Q > 127)
+				Q = 127;
+			else if (Q < -128)
+				Q = -128;
+
+			*blockptr++ = (uint8_t)Q + 128;
 		}
 
 		(void)queue_try_add(&iq_queue, block);
