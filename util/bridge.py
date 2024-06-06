@@ -1,57 +1,88 @@
 #!/usr/bin/env python
 
-import time
-from codecs import encode
-from socket import AF_INET, SO_SNDBUF, SOCK_STREAM, SOL_SOCKET, socket
+import struct
+from socket import (AF_INET, MSG_DONTWAIT, SO_REUSEADDR, SO_SNDBUF,
+                    SOCK_STREAM, SOL_SOCKET, socket)
 
 import click
 import serial
 
+COMMAND_NAMES = [
+    "reset",
+    "tune_freq",
+    "sample_rate",
+    "manual_gain",
+    "gain",
+    "ppm_offset",
+    "if_gain",
+    "test_mode",
+    "agc",
+    "direct_sampling",
+    "offset_tuning",
+    "11",
+    "12",
+    "gain_index",
+    "bias_tee",
+]
+
+
+def describe(cmd: int, arg: int):
+    try:
+        print("->", COMMAND_NAMES[cmd], arg)
+    except IndexError:
+        print("->", cmd, arg)
+
 
 @click.command()
-@click.option("-f", "--frequency", default=40680000, help="Frequency to tune to")
-@click.option("--rx", default=10, help="Receive pin")
-@click.option("--bias", default=11, help="Bias pin")
-def bridge(frequency, rx, bias):
+@click.option("-f", "--frequency", default=88200000, help="Frequency to tune to")
+def bridge(frequency):
     sock = socket(AF_INET, SOCK_STREAM)
+    sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     sock.setsockopt(SOL_SOCKET, SO_SNDBUF, 1024 * 100)
 
-    with serial.Serial("/dev/ttyACM0", baudrate=10_000_000) as fp:
-        print("Resetting...")
-        fp.write(b"\r\n")
+    print("Posing as rtl_tcp at tcp://127.0.0.1:1234")
+    sock.bind(("127.0.0.1", 1234))
+    sock.listen(3)
 
-        time.sleep(0.1)
+    while True:
+        peer, addr = sock.accept()
+        print("Client connected:", addr)
 
-        while fp.in_waiting:
-            fp.read(fp.in_waiting)
-            time.sleep(0.1)
+        with serial.Serial("/dev/ttyACM0", baudrate=10_000_000, timeout=0.1) as fp:
+            print(f"Starting RX @ {frequency}")
+            fp.write(struct.pack(">BBL", 0, 1, int(frequency)))
+            fp.flush()
 
-        print("Connecting to localhost:1234...")
-        sock.connect(("localhost", 1234))
+            print("Begin")
 
-        print(f"Starting RX {rx}/{bias} at {frequency}...")
-        fp.write(f"brx {rx} {bias} {frequency}\r\n".encode("ascii"))
-        fp.read_until(b"$")
+            try:
+                cmd = b""
 
-        try:
-            while True:
-                bstr = fp.read(64)
-                assert len(bstr) == 64
+                while True:
+                    try:
+                        cmd += peer.recv(1, MSG_DONTWAIT)
+                    except BlockingIOError:
+                        pass
 
-                try:
-                    assert len(bstr) == sock.send(bstr)
-                except ConnectionRefusedError:
-                    pass
+                    while len(cmd) >= 5:
+                        fp.write(cmd[:5])
+                        info = struct.unpack(">BL", cmd[:5])
+                        describe(*info)
+                        cmd = cmd[5:]
 
-        except ConnectionError:
-            pass
+                    data = fp.read(64)
+                    if data:
+                        peer.send(data)
 
-        except KeyboardInterrupt:
-            pass
+            except ConnectionError:
+                pass
 
-        finally:
-            fp.write(b"\r\n")
-            print("Bye.")
+            except KeyboardInterrupt:
+                pass
+
+            finally:
+                fp.write(b"\x00")
+                print("Bye.")
 
 
 if __name__ == "__main__":

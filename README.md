@@ -22,12 +22,12 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
    picotool load -f build/pico_sdr.uf2
    ```
 
-3. Start the USB serial to TCP bridge, setting the frequency to 88.2 MHz:
+3. Start the USB serial to TCP bridge:
 
    ```bash
-   python util/bridge.py -f 88200000
+   python util/bridge.py
    ```
 
-4. Open `grc/PicoSDR-WBFM.grc` in GNU Radio Companion.
+4. Open `grc/PicoSDR-WBFM.grc` in GNU Radio Companion, adjust carrier frequency to match your favorite FM radio station and press `F6`.
 
-5. Press `F6`. After you close the window, the bridge will exit as well.
+5. Alternatively [gqrx](https://www.gqrx.dk/) seems to work fine with `rtl_tcp` input mode. Maximum sample rate seem to be 400 ksps, above that the samples are dropped.
