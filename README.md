@@ -2,7 +2,7 @@
 
 Using RP2040 / Raspberry Pi Pico as a software-defined radio receiver.
 
-See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatiom.
+See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more information. Older code the article is mostly referring to can be found in the branch `old`.
 
 ## Circuit
 
@@ -28,6 +28,8 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
    python util/bridge.py
    ```
 
+   You need to have PySerial and Click packages installed.
+
 4. Open `grc/PicoSDR-WBFM.grc` in GNU Radio Companion, adjust carrier frequency to match your favorite FM radio station and press `F6`.
 
-5. Alternatively [gqrx](https://www.gqrx.dk/) seems to work fine with `rtl_tcp` input mode. Maximum sample rate seem to be 400 ksps, above that the samples are dropped.
+5. Alternatively [gqrx](https://www.gqrx.dk/) works fine with `rtl_tcp` input mode. Maximum sample rate seem to be 400 ksps, above that the samples are dropped.
