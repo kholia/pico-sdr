@@ -1,12 +1,36 @@
 #!/usr/bin/env python
 
-import binascii
 import struct
 from socket import (AF_INET, MSG_DONTWAIT, SO_REUSEADDR, SO_SNDBUF,
                     SOCK_STREAM, SOL_SOCKET, socket)
 
 import click
 import serial
+
+COMMAND_NAMES = [
+    "reset",
+    "tune_freq",
+    "sample_rate",
+    "manual_gain",
+    "gain",
+    "ppm_offset",
+    "if_gain",
+    "test_mode",
+    "agc",
+    "direct_sampling",
+    "offset_tuning",
+    "11",
+    "12",
+    "gain_index",
+    "bias_tee",
+]
+
+
+def describe(cmd: int, arg: int):
+    try:
+        print("->", COMMAND_NAMES[cmd], arg)
+    except IndexError:
+        print("->", cmd, arg)
 
 
 @click.command()
@@ -43,7 +67,7 @@ def bridge(frequency):
                     while len(cmd) >= 5:
                         fp.write(cmd[:5])
                         info = struct.unpack(">BL", cmd[:5])
-                        print("->", hex(info[0]), info[1])
+                        describe(*info)
                         cmd = cmd[5:]
 
                     data = fp.read(64)
