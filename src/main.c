@@ -21,52 +21,38 @@
 #include <limits.h>
 #include <stdlib.h>
 
-/* FM Radio */
-#if 1
 #define VREG_VOLTAGE VREG_VOLTAGE_1_20
 #define CLK_SYS_HZ (300 * MHZ)
-#define BANDWIDTH 1536000
-#define DECIMATION_BITS 3
-#define LPF_ORDER 4
-#define AGC_DECAY_BITS 20
 #define LO_DITHER 1
-#endif
+#define PSU_PIN 23
 
-/* Digital Data */
-#if 0
-#define VREG_VOLTAGE VREG_VOLTAGE_DEFAULT
-#define CLK_SYS_HZ (252 * MHZ)
-#define BANDWIDTH 1280000
-#define DECIMATION_BITS 6
-#define LPF_ORDER 4
-#define AGC_DECAY_BITS 16
-#define LO_DITHER 1
-#endif
-
-#define IQ_BLOCK_LEN 32
-#define RX_SLEEP_US (DECIMATION * BANDWIDTH / (1 * MHZ) / 4)
-#define DECIMATION (1 << DECIMATION_BITS)
-
-static_assert(RX_SLEEP_US > 0, "RX_SLEEP_US must be positive");
-static_assert(LPF_ORDER <= 4, "LPF_ORDER must be 0-4");
+#define IQ_SAMPLES 32
+#define IQ_BLOCK_LEN (2 * IQ_SAMPLES)
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
 #define LO_SIN_ACCUMULATOR (&pio1->sm[3].pinctrl)
 
-#define LO_BITS_DEPTH 13
-#define LO_WORDS (1 << LO_BITS_DEPTH)
-static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
-static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(LO_WORDS * 4)));
+#define LO_BITS_DEPTH 15
+#define LO_WORDS (1 << (LO_BITS_DEPTH - 2))
+static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(1 << LO_BITS_DEPTH)));
+static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(1 << LO_BITS_DEPTH)));
 
-#if DECIMATION_BITS >= 5
-#define RX_BITS_DEPTH (DECIMATION_BITS + 2)
-#else
-#define RX_BITS_DEPTH 7
-#endif
-#define RX_WORDS (1 << RX_BITS_DEPTH)
-static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
-static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(RX_WORDS * 4)));
+#define RX_STRIDE (2 * IQ_SAMPLES)
+#define RX_BITS_DEPTH 12
+#define RX_WORDS (1 << (RX_BITS_DEPTH - 2))
+static uint32_t rx_cos[RX_WORDS] __attribute__((__aligned__(1 << RX_BITS_DEPTH)));
+static uint32_t rx_sin[RX_WORDS] __attribute__((__aligned__(1 << RX_BITS_DEPTH)));
+
+#define INIT_GAIN 256
+#define INIT_SAMPLE_RATE 100000
+
+#define NUM_GAINS 29
+static int gains[NUM_GAINS] = { 0,   9,	  14,  27,  37,	 77,  87,  125, 144, 157,
+				166, 197, 207, 229, 254, 280, 297, 328, 338, 364,
+				372, 386, 402, 421, 434, 439, 445, 480, 496 };
+static int gain = INIT_GAIN;
+static int sample_rate = INIT_SAMPLE_RATE;
 
 #define SIN_PHASE (UINT_MAX / 4)
 #define COS_PHASE (0)
@@ -88,13 +74,16 @@ static int dma_t_samp = -1;
 static int dma_ch_in_cos = -1;
 static int dma_ch_in_sin = -1;
 
-static int dma_ch_tx_cos = -1;
-
 static queue_t iq_queue;
-static int gap = 0;
-static int agc = 0;
 
-#define PSU_PIN 23
+static uint32_t read_arg(void)
+{
+	uint32_t a = getchar_timeout_us(100);
+	uint32_t b = getchar_timeout_us(100);
+	uint32_t c = getchar_timeout_us(100);
+	uint32_t d = getchar_timeout_us(100);
+	return (a << 24) | (b << 16) | (c << 8) | d;
+}
 
 static void bias_init(int in_pin, int out_pin)
 {
@@ -110,12 +99,8 @@ static void bias_init(int in_pin, int out_pin)
 
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
-		pio_encode_set(pio_x, 4) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_set(pio_x, 31) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_jmp_x_dec(2) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
-
-		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
-		pio_encode_set(pio_x, 4) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
-		pio_encode_jmp_x_dec(5) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
 
 	pio_program_t prog = {
@@ -182,46 +167,6 @@ static void watch_init(int in_pin)
 	pio_sm_set_enabled(pio1, 1, true);
 }
 
-static void send_init(int out_pin)
-{
-	gpio_disable_pulls(out_pin);
-	pio_gpio_init(pio1, out_pin);
-	gpio_set_drive_strength(out_pin, GPIO_DRIVE_STRENGTH_2MA);
-	gpio_set_slew_rate(out_pin, GPIO_SLEW_RATE_SLOW);
-
-	const uint16_t insn[] = {
-		pio_encode_out(pio_pins, 1) | pio_encode_sideset(1, 1),
-	};
-
-	pio_program_t prog = {
-		.instructions = insn,
-		.length = 1,
-		.origin = 5,
-	};
-
-	pio_sm_set_enabled(pio1, 1, false);
-	pio_sm_restart(pio1, 1);
-	pio_sm_clear_fifos(pio1, 1);
-
-	if (pio_can_add_program(pio1, &prog))
-		pio_add_program(pio1, &prog);
-
-	pio_sm_config pc = pio_get_default_sm_config();
-	sm_config_set_sideset(&pc, 1, false, true);
-	sm_config_set_sideset_pins(&pc, out_pin);
-	sm_config_set_out_pins(&pc, out_pin, 1);
-	sm_config_set_set_pins(&pc, out_pin, 1);
-	sm_config_set_wrap(&pc, prog.origin, prog.origin + prog.length - 1);
-	sm_config_set_clkdiv_int_frac(&pc, 1, 0);
-	sm_config_set_fifo_join(&pc, PIO_FIFO_JOIN_TX);
-	sm_config_set_out_shift(&pc, false, true, 32);
-	pio_sm_init(pio1, 1, prog.origin, &pc);
-
-	pio_sm_set_consecutive_pindirs(pio1, 1, out_pin, 1, GPIO_OUT);
-
-	pio_sm_set_enabled(pio1, 1, true);
-}
-
 static void adder_init()
 {
 	const uint16_t insn[] = {
@@ -264,12 +209,6 @@ static void adder_init()
 	pio_sm_set_enabled(pio1, 3, true);
 }
 
-inline static float lo_round_freq(size_t bits, float req_freq)
-{
-	const double step_hz = (double)CLK_SYS_HZ / bits;
-	return round(req_freq / step_hz) * step_hz;
-}
-
 static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
 {
 	unsigned step = ((double)UINT_MAX + 1.0) / (double)CLK_SYS_HZ * freq;
@@ -296,75 +235,26 @@ static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
 	}
 }
 
-static float rx_lo_init(double req_freq)
+static void rx_lo_init(double req_freq)
 {
-	float freq = lo_round_freq(LO_WORDS * 32, req_freq);
+	const double step_hz = (double)CLK_SYS_HZ / (4 << LO_BITS_DEPTH);
+	double freq = round(req_freq / step_hz) * step_hz;
 
 	lo_generate(lo_cos, LO_WORDS, freq, COS_PHASE);
 	lo_generate(lo_sin, LO_WORDS, freq, SIN_PHASE);
-
-	return freq;
 }
 
-static float tx_fsk_lo_init(float req_freq, float separation)
-{
-	float hi = lo_round_freq(LO_WORDS * 32, req_freq + separation / 2);
-	float lo = lo_round_freq(LO_WORDS * 32, hi - separation);
-
-	lo_generate(lo_cos, LO_WORDS, hi, COS_PHASE);
-	lo_generate(lo_sin, LO_WORDS, lo, SIN_PHASE);
-
-	return (hi + lo) / 2.0f;
-}
-
-inline static __unused int cheap_atan2(int y, int x)
-{
-	if (y > 0) {
-		if (x > 0) {
-			if (y > x)
-				return 16 << 24;
-			return 0;
-		} else {
-			if (-x > y)
-				return 48 << 24;
-			return 32 << 24;
-		}
-	} else {
-		if (x < 0) {
-			if (y < x)
-				return 80 << 24;
-			return 64 << 24;
-		} else {
-			if (x > -y)
-				return 112 << 24;
-			return 96 << 24;
-		}
-	}
-}
-
-inline static __unused int cheap_angle_diff(int angle1, int angle2)
-{
-	int diff = angle2 - angle1;
-
-	if (diff > INT_MAX / 2)
-		return diff - INT_MAX;
-
-	if (diff < INT_MIN / 2)
-		return diff + INT_MAX;
-
-	return diff;
-}
-
-static const uint32_t samp_insn[] __attribute__((__aligned__(16))) = {
-	0x4020, /* IN X, 32 */
+static const uint32_t samp_insn[4] __attribute__((__aligned__(16)));
+static const uint32_t samp_insn[4] = {
 	0x4040, /* IN Y, 32 */
-	0xe020, /* SET X, 0 */
+	0x4020, /* IN X, 32 */
 	0xe040, /* SET Y, 0 */
+	0xe020, /* SET X, 0 */
 };
 
 static uint32_t null, one = 1;
 
-static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int frac_denom)
+static void rf_rx_start(int rx_pin, int bias_pin, double freq, int rate)
 {
 	dma_ch_rx = dma_claim_unused_channel(true);
 	dma_ch_cp = dma_claim_unused_channel(true);
@@ -404,7 +294,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
 	channel_config_set_read_increment(&dma_conf, true);
 	channel_config_set_write_increment(&dma_conf, false);
-	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
+	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH);
 	channel_config_set_chain_to(&dma_conf, dma_ch_sin);
 	dma_channel_configure(dma_ch_cos, &dma_conf, LO_COS_ACCUMULATOR + XOR_ADDR / 4, lo_cos, 1,
 			      false);
@@ -414,7 +304,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
 	channel_config_set_read_increment(&dma_conf, true);
 	channel_config_set_write_increment(&dma_conf, false);
-	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
+	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH);
 	channel_config_set_chain_to(&dma_conf, dma_ch_pio_cos);
 	dma_channel_configure(dma_ch_sin, &dma_conf, LO_SIN_ACCUMULATOR + XOR_ADDR / 4, lo_sin, 1,
 			      false);
@@ -440,7 +330,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 			      false);
 
 	/* Pacing timer for the sampling script trigger channel. */
-	dma_timer_set_fraction(dma_t_samp, frac_num, frac_denom);
+	dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / rate);
 
 	/* Sampling trigger channel. */
 	dma_conf = dma_channel_get_default_config(dma_ch_samp_trig);
@@ -448,6 +338,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	channel_config_set_read_increment(&dma_conf, false);
 	channel_config_set_write_increment(&dma_conf, false);
 	channel_config_set_dreq(&dma_conf, dma_get_timer_dreq(dma_t_samp));
+	channel_config_set_high_priority(&dma_conf, true);
 	channel_config_set_chain_to(&dma_conf, dma_ch_samp_cos);
 	dma_channel_configure(dma_ch_samp_trig, &dma_conf, &null, &one, 1, false);
 
@@ -457,6 +348,7 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	channel_config_set_read_increment(&dma_conf, true);
 	channel_config_set_write_increment(&dma_conf, false);
 	channel_config_set_ring(&dma_conf, false, 4);
+	channel_config_set_high_priority(&dma_conf, true);
 	channel_config_set_chain_to(&dma_conf, dma_ch_samp_sin);
 	dma_channel_configure(dma_ch_samp_cos, &dma_conf, &pio1->sm[2].instr, samp_insn, 4, false);
 
@@ -466,19 +358,17 @@ static float rf_rx_start(int rx_pin, int bias_pin, float freq, int frac_num, int
 	channel_config_set_read_increment(&dma_conf, true);
 	channel_config_set_write_increment(&dma_conf, false);
 	channel_config_set_ring(&dma_conf, false, 4);
+	channel_config_set_high_priority(&dma_conf, true);
 	channel_config_set_chain_to(&dma_conf, dma_ch_samp_trig);
 	dma_channel_configure(dma_ch_samp_sin, &dma_conf, &pio1->sm[3].instr, samp_insn, 4, false);
 
 	bias_init(rx_pin, bias_pin);
 	adder_init();
 
-	float actual = rx_lo_init(freq);
-
+	rx_lo_init(freq);
 	dma_channel_start(dma_ch_rx);
 	dma_channel_start(dma_ch_samp_trig);
 	watch_init(rx_pin);
-
-	return actual;
 }
 
 static void rf_rx_stop(void)
@@ -545,73 +435,11 @@ static void rf_rx_stop(void)
 	dma_t_samp = -1;
 }
 
-static void rf_tx_start(int tx_pin)
-{
-	send_init(tx_pin);
-
-	dma_ch_tx_cos = dma_claim_unused_channel(true);
-
-	dma_channel_config dma_conf = dma_channel_get_default_config(dma_ch_tx_cos);
-	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
-	channel_config_set_read_increment(&dma_conf, true);
-	channel_config_set_write_increment(&dma_conf, false);
-	channel_config_set_ring(&dma_conf, false, LO_BITS_DEPTH + 2);
-	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 1, true));
-	dma_channel_configure(dma_ch_tx_cos, &dma_conf, &pio1->txf[1], lo_cos, UINT_MAX, true);
-}
-
-static void rf_tx_stop()
-{
-	puts("Stopping TX...");
-	pio_sm_set_enabled(pio1, 1, false);
-	pio_sm_restart(pio1, 1);
-	pio_sm_clear_fifos(pio1, 1);
-
-	puts("Stopping DMA...");
-	dma_channel_abort(dma_ch_tx_cos);
-	dma_channel_cleanup(dma_ch_tx_cos);
-	dma_channel_unclaim(dma_ch_tx_cos);
-	dma_ch_tx_cos = -1;
-}
-
 static void rf_rx(void)
 {
-	const int amp_max = CLK_SYS_HZ / 2 / BANDWIDTH * DECIMATION;
-
-	/* Scale down 2× to accomodate for jitter. */
-	const int amp_scale = INT_MAX / amp_max / 2;
-
-	static int16_t block[IQ_BLOCK_LEN];
+	static uint8_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
-
-#if LPF_ORDER >= 1
-	static int lpIh1[DECIMATION];
-	static int lpQh1[DECIMATION];
-	int lpIa1 = 0;
-	int lpQa1 = 0;
-#endif
-
-#if LPF_ORDER >= 2
-	static int lpIh2[DECIMATION];
-	static int lpQh2[DECIMATION];
-	int lpIa2 = 0;
-	int lpQa2 = 0;
-#endif
-
-#if LPF_ORDER >= 3
-	static int lpIh3[DECIMATION];
-	static int lpQh3[DECIMATION];
-	int lpIa3 = 0;
-	int lpQa3 = 0;
-#endif
-
-#if LPF_ORDER >= 4
-	static int lpIh4[DECIMATION];
-	static int lpQh4[DECIMATION];
-	int lpIa4 = 0;
-	int lpQa4 = 0;
-#endif
 
 	int64_t dcI = 0, dcQ = 0;
 
@@ -622,169 +450,77 @@ static void rf_rx(void)
 			return;
 		}
 
-		int16_t *blockptr = block;
+		int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
 
-		for (int i = 0; i < IQ_BLOCK_LEN / 2; i++) {
-			int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-			gap = 2 * DECIMATION - delta;
+		while (delta < RX_STRIDE * 2) {
+			delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
+			sleep_us(1);
+		}
 
-			while (delta < 2 * DECIMATION) {
-				delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
-				sleep_us(RX_SLEEP_US);
-			}
+		prev_transfers -= RX_STRIDE;
 
-			prev_transfers -= 2 * DECIMATION;
+		uint32_t *cos_ptr = rx_cos + pos;
+		uint32_t *sin_ptr = rx_sin + pos;
 
-			uint32_t *cos_ptr = rx_cos + pos;
-			uint32_t *sin_ptr = rx_sin + pos;
+		pos = (pos + RX_STRIDE) & (RX_WORDS - 1);
 
-			pos = (pos + 2 * DECIMATION) & (RX_WORDS - 1);
+		uint8_t *blockptr = block;
 
-			int dI = 0;
+		/*
+		 * Since every 2 samples add to either +1 or -1,
+		 * the maximum amplitude in one direction is 1/2.
+		 */
+		int64_t max_amplitude = CLK_SYS_HZ / 2;
 
-			for (int d = 0; d < DECIMATION; d++) {
-				uint32_t cos_pos = *cos_ptr++;
-				uint32_t cos_neg = *cos_ptr++;
-				int I = cos_neg - cos_pos;
-				I = I * amp_scale;
+		/*
+		 * Since the waveform is normally half of the time
+		 * above zero, we could halve once more.
+		 *
+		 * Instead we use 2/3 to provide 1/3 reserve.
+		 */
+		max_amplitude = max_amplitude * 2 / 3;
 
-#if LPF_ORDER >= 1
-				lpIa1 += I - lpIh1[d];
-				lpIh1[d] = I;
-				I = lpIa1 / DECIMATION;
-#endif
-#if LPF_ORDER >= 2
-				lpIa2 += I - lpIh2[d];
-				lpIh2[d] = I;
-				I = lpIa2 / DECIMATION;
-#endif
-#if LPF_ORDER >= 3
-				lpIa3 += I - lpIh3[d];
-				lpIh3[d] = I;
-				I = lpIa3 / DECIMATION;
-#endif
-#if LPF_ORDER >= 4
-				lpIa4 += I - lpIh4[d];
-				lpIh4[d] = I;
-				I = lpIa4 / DECIMATION;
-#endif
-				dI += I;
-			}
+		/*
+		 * We are allowing the counters to only go as high
+		 * as sampling rate.
+		 */
+		max_amplitude /= sample_rate;
 
-			int dQ = 0;
+		for (int i = 0; i < IQ_SAMPLES; i++) {
+			uint32_t cos_neg = *cos_ptr++;
+			uint32_t cos_pos = *cos_ptr++;
+			int I32 = cos_neg - cos_pos;
+			int64_t I = I32;
 
-			/*
-			 * Original dI/dQ are scaled to 32 bits.
-			 * These "<< 19" are part of DC removal alpha.
-			 */
-			int64_t dI19 = (int64_t)dI << 19;
-			dcI = ((dcI << 13) - dcI + dI19) >> 13;
-			dI = (dI19 - dcI) >> 19;
+			dcI = ((dcI << 16) - dcI + (I << 16)) >> 16;
+			I -= dcI >> 16;
 
-			for (int d = 0; d < DECIMATION; d++) {
-				uint32_t sin_pos = *sin_ptr++;
-				uint32_t sin_neg = *sin_ptr++;
-				int Q = sin_neg - sin_pos;
-				Q = Q * amp_scale;
+			I *= gain;
+			I /= max_amplitude;
 
-#if LPF_ORDER >= 1
-				lpQa1 += Q - lpQh1[d];
-				lpQh1[d] = Q;
-				Q = lpQa1 / DECIMATION;
-#endif
-#if LPF_ORDER >= 2
-				lpQa2 += Q - lpQh2[d];
-				lpQh2[d] = Q;
+			*blockptr++ = I + 128;
 
-				Q = lpQa2 / DECIMATION;
-#endif
-#if LPF_ORDER >= 3
-				lpQa3 += Q - lpQh3[d];
-				lpQh3[d] = Q;
-				Q = lpQa3 / DECIMATION;
-#endif
-#if LPF_ORDER >= 4
-				lpQa4 += Q - lpQh4[d];
-				lpQh4[d] = Q;
-				Q = lpQa4 / DECIMATION;
-#endif
-				dQ += Q;
-			}
+			uint32_t sin_neg = *sin_ptr++;
+			uint32_t sin_pos = *sin_ptr++;
+			int Q32 = sin_neg - sin_pos;
+			int64_t Q = Q32;
 
-			int64_t dQ19 = (int64_t)dQ << 19;
-			dcQ = ((dcQ << 13) - dcQ + dQ19) >> 13;
-			dQ = (dQ19 - dcQ) >> 19;
+			dcQ = ((dcQ << 16) - dcQ + (Q << 16)) >> 16;
+			Q -= dcQ >> 16;
 
-			/* Slowly decay AGC amplitude. */
-			agc -= (agc >> AGC_DECAY_BITS) | 1;
+			Q *= gain;
+			Q /= max_amplitude;
 
-			if (abs(dI) > agc)
-				agc = abs(dI);
-
-			if (abs(dQ) > agc)
-				agc = abs(dQ);
-
-			int agc_div = (agc >> (8 + 7)) + (agc >> (8 + 14));
-
-			*blockptr++ = dI / agc_div;
-			*blockptr++ = dQ / agc_div;
+			*blockptr++ = Q + 128;
 		}
 
 		(void)queue_try_add(&iq_queue, block);
 	}
 }
 
-inline static int icopysign(int x, int s)
+static void do_rx(int rx_pin, int bias_pin, double freq)
 {
-	return s >= 0 ? abs(x) : -abs(x);
-}
-
-static void __unused plot_IQ(int I, int Q)
-{
-	int mag = I ? icopysign(32 - __builtin_clz(abs(I)), I) : 0;
-
-	if (mag < 0) {
-		for (int l = -mag; l < 8; l++)
-			putchar(' ');
-
-		for (int l = 0; l < -mag; l++)
-			putchar('#');
-
-		printf("%8s", "");
-	} else {
-		printf("%8s", "");
-
-		for (int l = 0; l < mag; l++)
-			putchar('#');
-
-		for (int l = mag; l < 8; l++)
-			putchar(' ');
-	}
-
-	mag = Q ? icopysign(32 - __builtin_clz(abs(Q)), Q) : 0;
-
-	if (mag < 0) {
-		for (int l = -mag; l < 8; l++)
-			putchar(' ');
-
-		for (int l = 0; l < -mag; l++)
-			putchar('#');
-
-		printf("%8s", "");
-	} else {
-		printf("%8s", "");
-
-		for (int l = 0; l < mag; l++)
-			putchar('#');
-
-		for (int l = mag; l < 8; l++)
-			putchar(' ');
-	}
-}
-
-static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
-{
-	float actual = rf_rx_start(rx_pin, bias_pin, freq, 1, CLK_SYS_HZ / BANDWIDTH);
+	rf_rx_start(rx_pin, bias_pin, freq, sample_rate);
 	sleep_us(100);
 
 	dma_ch_in_cos = dma_claim_unused_channel(true);
@@ -796,7 +532,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
 	channel_config_set_read_increment(&dma_conf, false);
 	channel_config_set_write_increment(&dma_conf, true);
-	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH + 2);
+	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH);
 	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, false));
 	dma_channel_configure(dma_ch_in_cos, &dma_conf, rx_cos, &pio1->rxf[2], UINT_MAX, false);
 
@@ -804,7 +540,7 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
 	channel_config_set_read_increment(&dma_conf, false);
 	channel_config_set_write_increment(&dma_conf, true);
-	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH + 2);
+	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH);
 	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 3, false));
 	dma_channel_configure(dma_ch_in_sin, &dma_conf, rx_sin, &pio1->rxf[3], UINT_MAX, false);
 
@@ -812,57 +548,56 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 
 	multicore_launch_core1(rf_rx);
 
-	printf("Frequency: %.0f\n", actual);
-
-	static int16_t block[IQ_BLOCK_LEN];
+	static uint8_t block[IQ_BLOCK_LEN];
 
 	while (queue_try_remove(&iq_queue, block))
 		/* Flush the queue */;
 
-	if ('b' == mode) {
-		setvbuf(stdout, NULL, _IONBF, 0);
-		putchar('$');
-	}
-
 	while (true) {
 		int c = getchar_timeout_us(0);
-		if ('\r' == c)
-			break;
 
-		bool overflow = queue_is_full(&iq_queue);
+		if (c >= 0) {
+			if (0x00 == c) {
+				break;
+			} else if (0x01 == c) {
+				/* Tune to a new center frequency */
+				rx_lo_init(read_arg());
+			} else if (0x02 == c) {
+				/* Set the rate at which IQ sample pairs are sent */
+				sample_rate = read_arg();
+				dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
+			} else if (0x04 == c) {
+				/* Set the tuner gain level */
+				gain = INIT_GAIN * powf(10.0f, 0.01f * read_arg());
+			} else if (0x0d == c) {
+				/* Set tuner gain by the tuner's gain index */
+				uint32_t arg = read_arg();
 
-		if (queue_try_remove(&iq_queue, block)) {
-			if ('b' == mode) {
+				if (arg < NUM_GAINS) {
+					gain = INIT_GAIN * powf(10.0f, 0.01f * gains[arg]);
+				}
+			} else {
+				(void)read_arg();
+			}
+		}
+
+		for (int i = 0; i < 32; i++) {
+			if (queue_try_remove(&iq_queue, block)) {
 				fwrite(block, sizeof block, 1, stdout);
 				fflush(stdout);
 			} else {
-				/* Because AGC is kept 1 bit below to accomodate for jitter. */
-				float agc_frac = 2.0f * (float)agc / (float)INT_MAX;
-				float rssi = 10.0f * log10f(powf(agc_frac, 2));
-
-				for (int i = 0; i < IQ_BLOCK_LEN / 2; i += 2) {
-					int I = block[i] >> 8;
-					int Q = block[i + 1] >> 8;
-					printf("%i %+5i | %+5.1f dBm | %+4i %+4i | ", overflow,
-					       RX_WORDS / 2 + gap, rssi, I, Q);
-					plot_IQ(I, Q);
-					putchar('\n');
-				}
+				break;
 			}
 		}
 	}
 
-	putchar('\n');
-	puts("Stopping core1...");
 	multicore_fifo_push_blocking(0);
 	multicore_fifo_pop_blocking();
 	sleep_us(10);
 	multicore_reset_core1();
 
-	puts("Stopping RX...");
 	rf_rx_stop();
 
-	puts("Stopping readout DMAs...");
 	dma_channel_abort(dma_ch_in_cos);
 	dma_channel_abort(dma_ch_in_sin);
 	dma_channel_cleanup(dma_ch_in_cos);
@@ -871,236 +606,6 @@ static void do_rx(int rx_pin, int bias_pin, float freq, char mode)
 	dma_channel_unclaim(dma_ch_in_sin);
 	dma_ch_in_cos = -1;
 	dma_ch_in_sin = -1;
-
-	puts("Done.");
-}
-
-static void command(const char *cmd)
-{
-	static char tmp[83];
-	int n, x;
-	float f, g;
-
-	if (1 == sscanf(cmd, " help %[\a]", tmp)) {
-		puts("help             - this help");
-		puts("drive N X        - set GPIO pin drive strength");
-		puts("bias I O         - output negated I to O");
-		puts("rx N B FREQ      - receive on pin N, biasing with pin B");
-		puts("brx N FREQ       - receive on pin N, binary output");
-		puts("bpsk N FREQ      - transmit on pin N with BPSK");
-		puts("fsk N FREQ       - transmit on pin N with FSK");
-		puts("ook N FREQ       - transmit on pin N with OOK");
-		puts("sweep N F G S    - sweep from F to G with given step");
-		puts("noise N          - transmit random noise");
-		return;
-	}
-
-	if (3 == sscanf(cmd, " drive %i %i %[\a]", &n, &x, tmp)) {
-		if ((x < 0) || (x > 3)) {
-			puts("invalid drive strength, use 0-3 for 2, 4, 8, 12 mA");
-			return;
-		}
-
-		gpio_set_drive_strength(n, x);
-		static int strength[] = { 2, 4, 8, 12 };
-		printf("gpio%i: %i mA\n", n, strength[x]);
-		return;
-	}
-
-	if (3 == sscanf(cmd, " bias %i %i %[\a]", &n, &x, tmp)) {
-		bias_init(n, x);
-		return;
-	}
-
-	if (4 == sscanf(cmd, " rx %i %i %f %[\a]", &n, &x, &f, tmp)) {
-		do_rx(n, x, f, 'a');
-		return;
-	}
-
-	if (4 == sscanf(cmd, " brx %i %i %f %[\a]", &n, &x, &f, tmp)) {
-		do_rx(n, x, f, 'b');
-		return;
-	}
-
-	if (3 == sscanf(cmd, " bpsk %i %f %[\a]", &n, &f, tmp)) {
-		float actual = rx_lo_init(f);
-		printf("Frequency: %.0f\n", actual);
-
-		rf_tx_start(n);
-		puts("Transmitting, press ENTER to stop.");
-
-		bool phase = false;
-		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
-
-		while (true) {
-			int c = getchar_timeout_us(10000);
-
-			if ('\r' == c) {
-				break;
-			} else if (' ' == c) {
-				phase = !phase;
-				gpio_set_outover(n, phase);
-			} else if ('+' == c) {
-				actual = rx_lo_init(actual + step_hz);
-				printf("Frequency: %.0f\n", actual);
-			} else if ('-' == c) {
-				actual = rx_lo_init(actual - step_hz);
-				printf("Frequency: %.0f\n", actual);
-			} else if ((c >= '1') && (c <= '9')) {
-				for (int i = 0; i < 1000; i++) {
-					phase = !phase;
-					gpio_set_outover(n, phase);
-					sleep_us(1000 / (c - '0'));
-				}
-			}
-		}
-
-		rf_tx_stop();
-		gpio_set_outover(n, 0);
-		puts("Done.");
-		return;
-	}
-
-	if (4 == sscanf(cmd, " fsk %i %f %f %[\a]", &n, &f, &g, tmp)) {
-		g = lo_round_freq(LO_WORDS * 32, g);
-		f = tx_fsk_lo_init(f, g);
-		printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
-
-		rf_tx_start(n);
-		puts("Transmitting, press ENTER to stop.");
-
-		bool high = true;
-		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
-
-		while (true) {
-			int c = getchar_timeout_us(10000);
-
-			if ('\r' == c) {
-				break;
-			} else if (' ' == c) {
-				high = !high;
-
-				if (high) {
-					dma_hw->ch[dma_ch_tx_cos].read_addr = (uint32_t)lo_cos;
-				} else {
-					dma_hw->ch[dma_ch_tx_cos].read_addr = (uint32_t)lo_sin;
-				}
-			} else if ('+' == c) {
-				f = tx_fsk_lo_init(f + step_hz, g);
-				printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
-			} else if ('-' == c) {
-				f = tx_fsk_lo_init(f - step_hz, g);
-				printf("Frequency: %.0f +/- %.f\n", f, g / 2.0f);
-			} else if ((c >= '1') && (c <= '9')) {
-				for (int i = 0; i < 1000; i++) {
-					high = !high;
-
-					if (high) {
-						dma_hw->ch[dma_ch_tx_cos].read_addr =
-							(uint32_t)lo_cos;
-					} else {
-						dma_hw->ch[dma_ch_tx_cos].read_addr =
-							(uint32_t)lo_sin;
-					}
-
-					sleep_us(1000 / (c - '0'));
-				}
-			}
-		}
-
-		rf_tx_stop();
-		puts("Done.");
-		return;
-	}
-
-	if (3 == sscanf(cmd, " ook %i %f %[\a]", &n, &f, tmp)) {
-		float actual = rx_lo_init(f);
-		printf("Frequency: %.0f\n", actual);
-
-		rf_tx_start(n);
-		puts("Transmitting, press ENTER to stop.");
-
-		bool off = false;
-		const double step_hz = (double)CLK_SYS_HZ / (LO_WORDS * 32);
-
-		while (true) {
-			int c = getchar_timeout_us(10000);
-
-			if ('\r' == c) {
-				break;
-			} else if (' ' == c) {
-				off = !off;
-				gpio_set_oeover(n, off * 2);
-			} else if ('+' == c) {
-				actual = rx_lo_init(actual + step_hz);
-				printf("Frequency: %.0f\n", actual);
-			} else if ('-' == c) {
-				actual = rx_lo_init(actual - step_hz);
-				printf("Frequency: %.0f\n", actual);
-			} else if ((c >= '1') && (c <= '9')) {
-				for (int i = 0; i < 1000; i++) {
-					off = !off;
-					gpio_set_oeover(n, off * 2);
-					sleep_us(1000 / (c - '0'));
-				}
-			}
-		}
-
-		rf_tx_stop();
-		gpio_set_oeover(n, 0);
-		puts("Done.");
-		return;
-	}
-
-	if (5 == sscanf(cmd, " sweep %i %f %f %i %[\a]", &n, &f, &g, &x, tmp)) {
-		const float step_hz = (float)CLK_SYS_HZ / (LO_WORDS * 32);
-		const float start = roundf(f / step_hz) * step_hz;
-		const float stop = roundf(g / step_hz) * step_hz;
-
-		int steps = roundf((stop - start) / step_hz);
-
-		for (int i = 0; i < LO_WORDS; i++)
-			lo_cos[i] = 0;
-
-		rf_tx_start(n);
-
-		for (int i = 0; i < steps; i += x) {
-			int c = getchar_timeout_us(10000);
-			if ('\r' == c)
-				break;
-
-			float actual = rx_lo_init(start + i * step_hz);
-			printf("Frequency: %.0f\n", actual);
-		}
-
-		rf_tx_stop();
-		puts("Done.");
-		return;
-	}
-
-	if (2 == sscanf(cmd, " noise %i %[\a]", &n, tmp)) {
-		for (int i = 0; i < LO_WORDS; i++)
-			lo_cos[i] = rand();
-
-		rf_tx_start(n);
-
-		puts("Transmitting noise, press ENTER to stop.");
-
-		while (true) {
-			int c = getchar_timeout_us(100);
-			if ('\r' == c)
-				break;
-
-			for (int i = 0; i < LO_WORDS; i++)
-				lo_cos[i] = rand();
-		}
-
-		rf_tx_stop();
-		puts("Done.");
-		return;
-	}
-
-	puts("unknown command");
 }
 
 int main()
@@ -1118,53 +623,31 @@ int main()
 	bus_ctrl_hw->priority |= BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
 
 	stdio_usb_init();
+	setvbuf(stdout, NULL, _IONBF, 0);
 
-	for (int i = 0; i < 30; i++) {
-		if (stdio_usb_connected())
-			break;
-
-		sleep_ms(100);
-	}
-
-	printf("\nPuppet Online!\n");
-	printf("clk_sys = %10.6f MHz\n", (float)clock_get_hz(clk_sys) / MHZ);
-
-	queue_init(&iq_queue, IQ_BLOCK_LEN * sizeof(int16_t), 256);
-
-	static char cmd[83];
-	int cmdlen = 0;
-
-	printf("> ");
+	queue_init(&iq_queue, IQ_BLOCK_LEN, 256);
 
 	while (true) {
-		int c;
+		int c = getchar_timeout_us(0);
 
-		while ((c = getchar_timeout_us(10000)) >= 0) {
-			if ('\r' == c) {
-				/* Enter */
-			} else if ((8 == c) && (cmdlen > 0)) {
-				cmd[--cmdlen] = 0;
-				printf("\b \b");
-			} else if ((' ' == c) && (0 == cmdlen)) {
-				/* No leading spaces. */
-				continue;
-			} else if (c < ' ') {
-				continue;
-			} else {
-				cmd[cmdlen++] = c;
-				putchar(c);
-			}
+		if (0 == c) {
+			continue;
+		} else if (1 == c) {
+			/* Tune to a new center frequency */
+			uint32_t arg;
+			fread(&arg, sizeof arg, 1, stdin);
+			arg = __builtin_bswap32(arg);
 
-			if (('\r' == c) || cmdlen == 80) {
-				printf("\n");
-				if (cmdlen > 0) {
-					cmd[cmdlen] = '\a';
-					cmd[cmdlen + 1] = 0;
-					command(cmd);
-					cmdlen = 0;
-				}
-				printf("> ");
-			}
+			static const uint32_t header[3] = { __builtin_bswap32(0x52544c30),
+							    __builtin_bswap32(6),
+							    __builtin_bswap32(NUM_GAINS) };
+			fwrite(header, sizeof header, 1, stdout);
+			fflush(stdout);
+
+			gain = INIT_GAIN;
+			sample_rate = INIT_SAMPLE_RATE;
+
+			do_rx(10, 11, arg);
 		}
 	}
 }
