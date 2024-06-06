@@ -644,7 +644,7 @@ int main()
 			arg = __builtin_bswap32(arg);
 
 			static const uint32_t header[3] = { __builtin_bswap32(0x52544c30),
-							    __builtin_bswap32(6),
+							    __builtin_bswap32(5),
 							    __builtin_bswap32(NUM_GAINS) };
 			fwrite(header, sizeof header, 1, stdout);
 			fflush(stdout);
