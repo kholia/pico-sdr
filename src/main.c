@@ -23,7 +23,6 @@
 
 #define VREG_VOLTAGE VREG_VOLTAGE_1_20
 #define CLK_SYS_HZ (300 * MHZ)
-#define LO_DITHER 1
 #define PSU_PIN 23
 
 #define IQ_SAMPLES 32
@@ -202,22 +201,16 @@ static void adder_init()
 
 static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
 {
-	unsigned step = ((double)UINT_MAX + 1.0) / (double)CLK_SYS_HZ * freq;
+	static const double base = (UINT_MAX + 1.0) / CLK_SYS_HZ;
+
+	unsigned step = base * freq;
 	unsigned accum = phase;
 
 	for (size_t i = 0; i < len; i++) {
 		unsigned bits = 0;
 
 		for (int j = 0; j < 32; j++) {
-#if LO_DITHER
-			int n0 = rand() - RAND_MAX / 2;
-			int n1 = rand() - RAND_MAX / 2;
-			int noise = (n0 + n1) / 2;
-
-			bits |= (accum + noise) >> 31;
-#else
 			bits |= accum >> 31;
-#endif
 			bits <<= 1;
 			accum += step;
 		}
