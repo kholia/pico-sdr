@@ -76,15 +76,6 @@ static int dma_ch_in_sin = -1;
 
 static queue_t iq_queue;
 
-static uint32_t read_arg(void)
-{
-	uint32_t a = getchar_timeout_us(100);
-	uint32_t b = getchar_timeout_us(100);
-	uint32_t c = getchar_timeout_us(100);
-	uint32_t d = getchar_timeout_us(100);
-	return (a << 24) | (b << 16) | (c << 8) | d;
-}
-
 static void bias_init(int in_pin, int out_pin)
 {
 	gpio_disable_pulls(in_pin);
@@ -518,6 +509,49 @@ static void rf_rx(void)
 	}
 }
 
+static void run_command(uint8_t cmd, uint32_t arg)
+{
+	if (0x01 == cmd) {
+		/* Tune to a new center frequency */
+		rx_lo_init(arg);
+	} else if (0x02 == cmd) {
+		/* Set the rate at which IQ sample pairs are sent */
+		sample_rate = arg;
+		dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
+	} else if (0x04 == cmd) {
+		/* Set the tuner gain level */
+		gain = INIT_GAIN * powf(10.0f, 0.01f * arg);
+	} else if (0x0d == cmd) {
+		/* Set tuner gain by the tuner's gain index */
+		if (arg < NUM_GAINS) {
+			gain = INIT_GAIN * powf(10.0f, 0.01f * gains[arg]);
+		}
+	}
+}
+
+static bool check_command(void)
+{
+	static uint8_t buf[5];
+	static int pos = 0;
+
+	int c;
+
+	while ((c = getchar_timeout_us(0)) >= 0) {
+		if (0 == pos && 0 == c)
+			return true;
+
+		buf[pos++] = c;
+
+		if (5 == pos) {
+			uint32_t arg = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
+			run_command(buf[0], arg);
+			pos = 0;
+		}
+	}
+
+	return false;
+}
+
 static void do_rx(int rx_pin, int bias_pin, double freq)
 {
 	rf_rx_start(rx_pin, bias_pin, freq, sample_rate);
@@ -554,32 +588,8 @@ static void do_rx(int rx_pin, int bias_pin, double freq)
 		/* Flush the queue */;
 
 	while (true) {
-		int c = getchar_timeout_us(0);
-
-		if (c >= 0) {
-			if (0x00 == c) {
-				break;
-			} else if (0x01 == c) {
-				/* Tune to a new center frequency */
-				rx_lo_init(read_arg());
-			} else if (0x02 == c) {
-				/* Set the rate at which IQ sample pairs are sent */
-				sample_rate = read_arg();
-				dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
-			} else if (0x04 == c) {
-				/* Set the tuner gain level */
-				gain = INIT_GAIN * powf(10.0f, 0.01f * read_arg());
-			} else if (0x0d == c) {
-				/* Set tuner gain by the tuner's gain index */
-				uint32_t arg = read_arg();
-
-				if (arg < NUM_GAINS) {
-					gain = INIT_GAIN * powf(10.0f, 0.01f * gains[arg]);
-				}
-			} else {
-				(void)read_arg();
-			}
-		}
+		if (check_command())
+			break;
 
 		for (int i = 0; i < 32; i++) {
 			if (queue_try_remove(&iq_queue, block)) {
