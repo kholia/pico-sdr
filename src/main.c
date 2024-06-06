@@ -238,7 +238,7 @@ static const uint32_t samp_insn[4] = {
 
 static uint32_t null, one = 1;
 
-static void rf_rx_start(int rx_pin, int bias_pin, double freq, int rate)
+static void rf_rx_start(int rx_pin, int bias_pin)
 {
 	dma_ch_rx = dma_claim_unused_channel(true);
 	dma_ch_cp = dma_claim_unused_channel(true);
@@ -314,7 +314,7 @@ static void rf_rx_start(int rx_pin, int bias_pin, double freq, int rate)
 			      false);
 
 	/* Pacing timer for the sampling script trigger channel. */
-	dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / rate);
+	dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
 
 	/* Sampling trigger channel. */
 	dma_conf = dma_channel_get_default_config(dma_ch_samp_trig);
@@ -349,7 +349,6 @@ static void rf_rx_start(int rx_pin, int bias_pin, double freq, int rate)
 	bias_init(rx_pin, bias_pin);
 	adder_init();
 
-	rx_lo_init(freq);
 	dma_channel_start(dma_ch_rx);
 	dma_channel_start(dma_ch_samp_trig);
 	watch_init(rx_pin);
@@ -436,7 +435,7 @@ static void rf_rx(void)
 
 		int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
 
-		while (delta < RX_STRIDE * 2) {
+		while (delta < RX_STRIDE) {
 			delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
 			sleep_us(1);
 		}
@@ -524,7 +523,7 @@ static void run_command(uint8_t cmd, uint32_t arg)
 	}
 }
 
-static bool check_command(void)
+static int check_command(void)
 {
 	static uint8_t buf[5];
 	static int pos = 0;
@@ -533,7 +532,7 @@ static bool check_command(void)
 
 	while ((c = getchar_timeout_us(0)) >= 0) {
 		if (0 == pos && 0 == c)
-			return true;
+			return 0;
 
 		buf[pos++] = c;
 
@@ -541,15 +540,16 @@ static bool check_command(void)
 			uint32_t arg = (buf[1] << 24) | (buf[2] << 16) | (buf[3] << 8) | buf[4];
 			run_command(buf[0], arg);
 			pos = 0;
+			return buf[0];
 		}
 	}
 
-	return false;
+	return -1;
 }
 
-static void do_rx(int rx_pin, int bias_pin, double freq)
+static void do_rx(int rx_pin, int bias_pin)
 {
-	rf_rx_start(rx_pin, bias_pin, freq, sample_rate);
+	rf_rx_start(rx_pin, bias_pin);
 	sleep_us(100);
 
 	dma_ch_in_cos = dma_claim_unused_channel(true);
@@ -583,7 +583,7 @@ static void do_rx(int rx_pin, int bias_pin, double freq)
 		/* Flush the queue */;
 
 	while (true) {
-		if (check_command())
+		if (0 == check_command())
 			break;
 
 		for (int i = 0; i < 32; i++) {
@@ -632,27 +632,19 @@ int main()
 
 	queue_init(&iq_queue, IQ_BLOCK_LEN, 256);
 
+	rx_lo_init(INIT_FREQ);
+
 	while (true) {
-		int c = getchar_timeout_us(0);
-
-		if (0 == c) {
-			continue;
-		} else if (1 == c) {
-			/* Tune to a new center frequency */
-			uint32_t arg;
-			fread(&arg, sizeof arg, 1, stdin);
-			arg = __builtin_bswap32(arg);
-
+		if (check_command() > 0) {
 			static const uint32_t header[3] = { __builtin_bswap32(0x52544c30),
 							    __builtin_bswap32(5),
 							    __builtin_bswap32(NUM_GAINS) };
 			fwrite(header, sizeof header, 1, stdout);
 			fflush(stdout);
 
-			gain = INIT_GAIN;
-			sample_rate = INIT_SAMPLE_RATE;
-
-			do_rx(10, 11, arg);
+			do_rx(10, 11);
 		}
+
+		sleep_ms(10);
 	}
 }
