@@ -33,36 +33,28 @@ options:
     state: enabled
 
 blocks:
-- name: bpsk
-  id: variable_constellation
+- name: carrier
+  id: variable
   parameters:
     comment: ''
-    const_points: '[-1-1j, -1+1j, 1+1j, 1-1j]'
-    dims: '1'
-    normalization: digital.constellation.AMPLITUDE_NORMALIZATION
-    npwr: '1.0'
-    precision: '8'
-    rot_sym: '4'
-    soft_dec_lut: None
-    sym_map: '[0, 1, 3, 2]'
-    type: bpsk
+    value: '88_200_000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [280, 8.0]
+    coordinate: [168, 8.0]
     rotation: 0
-    state: true
+    state: enabled
 - name: samp_rate
   id: variable
   parameters:
     comment: ''
-    value: 1_536_000 // (1 << 3)
+    value: '192_000'
   states:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [176, 8.0]
+    coordinate: [264, 8.0]
     rotation: 0
     state: enabled
 - name: analog_quadrature_demod_cf_0
@@ -78,7 +70,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 312.0]
+    coordinate: [640, 336.0]
     rotation: 0
     state: true
 - name: analog_wfm_rcv_pll_0
@@ -96,7 +88,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [456, 376.0]
+    coordinate: [640, 440.0]
     rotation: 0
     state: true
 - name: audio_sink_0
@@ -113,7 +105,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 384.0]
+    coordinate: [928, 448.0]
     rotation: 0
     state: true
 - name: blocks_message_debug_0
@@ -128,7 +120,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [992, 8.0]
+    coordinate: [928, 32.0]
     rotation: 0
     state: true
 - name: blocks_probe_rate_0
@@ -148,20 +140,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 16.0]
-    rotation: 0
-    state: true
-- name: import_0
-  id: import
-  parameters:
-    alias: ''
-    comment: ''
-    imports: import math
-  states:
-    bus_sink: false
-    bus_source: false
-    bus_structure: null
-    coordinate: [440, 8.0]
+    coordinate: [640, 40.0]
     rotation: 0
     state: true
 - name: low_pass_filter_0
@@ -185,7 +164,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [992, 284.0]
+    coordinate: [928, 284.0]
     rotation: 0
     state: enabled
 - name: osmosdr_source_0
@@ -363,7 +342,7 @@ blocks:
     dc_offset_mode7: '0'
     dc_offset_mode8: '0'
     dc_offset_mode9: '0'
-    freq0: '88_200_000'
+    freq0: carrier
     freq1: 100e6
     freq10: 100e6
     freq11: 100e6
@@ -639,7 +618,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 208.0]
+    coordinate: [640, 232.0]
     rotation: 0
     state: true
 - name: qtgui_time_sink_x_0_0
@@ -736,7 +715,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [1192, 312.0]
+    coordinate: [1128, 312.0]
     rotation: 0
     state: true
 - name: qtgui_waterfall_sink_x_0_0
@@ -768,12 +747,12 @@ blocks:
     color9: '0'
     comment: ''
     fc: '0'
-    fftsize: '2048'
+    fftsize: '4096'
     freqhalf: 'True'
     grid: 'True'
     gui_hint: (0, 0, 1, 2)
     int_max: '0'
-    int_min: 10 * math.log10(1 / ((2 ** 15 - 1) ** 2))
+    int_min: 10 * math.log10(1 / ((2 ** 16) ** 2))
     label1: ''
     label10: ''
     label2: ''
@@ -797,7 +776,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [704, 104.0]
+    coordinate: [640, 128.0]
     rotation: 0
     state: true
 - name: qtgui_waterfall_sink_x_0_0_0_0
@@ -829,12 +808,12 @@ blocks:
     color9: '0'
     comment: ''
     fc: '0'
-    fftsize: '2048'
+    fftsize: '1024'
     freqhalf: 'True'
     grid: 'True'
     gui_hint: (3, 0, 1, 2)
     int_max: '0'
-    int_min: 10 * math.log10(1 / ((2 ** 15 - 1) ** 2))
+    int_min: 10 * math.log10(1 / ((2 ** 16) ** 2))
     label1: ''
     label10: ''
     label2: ''
@@ -858,7 +837,7 @@ blocks:
     bus_sink: false
     bus_source: false
     bus_structure: null
-    coordinate: [992, 184.0]
+    coordinate: [928, 184.0]
     rotation: 0
     state: true
 
