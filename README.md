@@ -30,4 +30,4 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
 
 4. Open `grc/PicoSDR-WBFM.grc` in GNU Radio Companion.
 
-5. Press `F6`.
+5. Press `F6`. After you close the window, the bridge will exit as well.
