@@ -50,7 +50,13 @@ def bridge(frequency):
 
         with serial.Serial("/dev/ttyACM0", baudrate=10_000_000, timeout=0.1) as fp:
             print(f"Starting RX @ {frequency}")
-            fp.write(struct.pack(">BBL", 0, 1, int(frequency)))
+
+            # Remove any leftovers.
+            while fp.read(64):
+                fp.write(b"\x00")
+                fp.flush()
+
+            fp.write(struct.pack(">BL", 1, int(frequency)))
             fp.flush()
 
             print("Begin")
@@ -82,6 +88,7 @@ def bridge(frequency):
 
             finally:
                 fp.write(b"\x00")
+                fp.flush()
                 print("Bye.")
 
 
