@@ -37,7 +37,8 @@
 static uint32_t lo_cos[LO_WORDS] __attribute__((__aligned__(1 << LO_BITS_DEPTH)));
 static uint32_t lo_sin[LO_WORDS] __attribute__((__aligned__(1 << LO_BITS_DEPTH)));
 
-#define RX_STRIDE (2 * IQ_SAMPLES)
+#define DECIMATE 2
+#define RX_STRIDE (2 * IQ_SAMPLES * DECIMATE)
 #define RX_BITS_DEPTH 12
 #define RX_WORDS (1 << (RX_BITS_DEPTH - 2))
 
@@ -318,7 +319,7 @@ static void rf_rx_start(int rx_pin, int bias_pin)
 			      false);
 
 	/* Pacing timer for the sampling script trigger channel. */
-	dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
+	dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / (sample_rate * DECIMATE));
 
 	/* Sampling trigger channel. */
 	dma_conf = dma_channel_get_default_config(dma_ch_samp_trig);
@@ -429,6 +430,7 @@ static void rf_rx(void)
 	unsigned pos = 0;
 
 	int64_t dcI = 0, dcQ = 0;
+	int prevI = 0, prevQ = 0;
 
 	while (true) {
 		if (multicore_fifo_rvalid()) {
@@ -478,8 +480,14 @@ static void rf_rx(void)
 		for (int i = 0; i < IQ_SAMPLES; i++) {
 			uint32_t cos_neg = *cos_ptr++;
 			uint32_t cos_pos = *cos_ptr++;
-			int I32 = cos_neg - cos_pos;
-			int64_t I = I32;
+			int I1 = cos_neg - cos_pos;
+
+			cos_neg = *cos_ptr++;
+			cos_pos = *cos_ptr++;
+			int I2 = cos_neg - cos_pos;
+
+			int64_t I = (prevI + I1 + I1 + I2) / 2;
+			prevI = I2;
 
 			int64_t I16 = I << 16;
 			dcI = ((dcI << 16) - dcI + I16) >> 16;
@@ -497,8 +505,14 @@ static void rf_rx(void)
 
 			uint32_t sin_neg = *sin_ptr++;
 			uint32_t sin_pos = *sin_ptr++;
-			int Q32 = sin_neg - sin_pos;
-			int64_t Q = Q32;
+			int Q1 = sin_neg - sin_pos;
+
+			sin_neg = *sin_ptr++;
+			sin_pos = *sin_ptr++;
+			int Q2 = sin_neg - sin_pos;
+
+			int64_t Q = (prevQ + Q1 + Q1 + Q2) / 2;
+			prevQ = Q2;
 
 			int64_t Q16 = Q << 16;
 			dcQ = ((dcQ << 16) - dcQ + Q16) >> 16;
@@ -527,7 +541,7 @@ static void run_command(uint8_t cmd, uint32_t arg)
 	} else if (0x02 == cmd) {
 		/* Set the rate at which IQ sample pairs are sent */
 		sample_rate = arg;
-		dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / sample_rate);
+		dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / (sample_rate * DECIMATE));
 	} else if (0x04 == cmd) {
 		/* Set the tuner gain level */
 		gain = INIT_GAIN * powf(10.0f, 0.01f * arg);
