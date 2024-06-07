@@ -544,11 +544,11 @@ static void run_command(uint8_t cmd, uint32_t arg)
 		dma_timer_set_fraction(dma_t_samp, 1, CLK_SYS_HZ / (sample_rate * DECIMATE));
 	} else if (0x04 == cmd) {
 		/* Set the tuner gain level */
-		gain = INIT_GAIN * powf(10.0f, 0.01f * arg);
+		gain = INIT_GAIN * powf(10.0f, 0.005f * arg);
 	} else if (0x0d == cmd) {
 		/* Set tuner gain by the tuner's gain index */
 		if (arg < NUM_GAINS) {
-			gain = INIT_GAIN * powf(10.0f, 0.01f * gains[arg]);
+			gain = INIT_GAIN * powf(10.0f, 0.005f * gains[arg]);
 		}
 	}
 }
