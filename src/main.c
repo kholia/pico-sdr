@@ -613,19 +613,19 @@ static void do_rx(int rx_pin, int bias_pin)
 		/* Flush the queue */;
 
 	while (true) {
-		if (0 == check_command())
-			break;
+		int cmd;
 
-		for (int i = 0; i < 32; i++) {
-			if (queue_try_remove(&iq_queue, block)) {
-				fwrite(block, sizeof block, 1, stdout);
-				fflush(stdout);
-			} else {
-				break;
-			}
+		while ((cmd = check_command()) >= 0)
+			if (0 == cmd)
+				goto done;
+
+		if (queue_try_remove(&iq_queue, block)) {
+			fwrite(block, sizeof block, 1, stdout);
+			fflush(stdout);
 		}
 	}
 
+done:
 	multicore_fifo_push_blocking(0);
 	multicore_fifo_pop_blocking();
 	sleep_us(10);
