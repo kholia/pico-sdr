@@ -27,6 +27,7 @@
 
 #define IQ_SAMPLES 32
 #define IQ_BLOCK_LEN (2 * IQ_SAMPLES)
+#define IQ_QUEUE_LEN 64
 
 #define XOR_ADDR 0x1000
 #define LO_COS_ACCUMULATOR (&pio1->sm[2].pinctrl)
@@ -79,6 +80,8 @@ static int dma_ch_in_cos = -1;
 static int dma_ch_in_sin = -1;
 
 static queue_t iq_queue;
+static uint8_t iq_queue_buffer[IQ_QUEUE_LEN][IQ_BLOCK_LEN];
+static size_t iq_queue_pos = 0;
 
 static void bias_init(int in_pin, int out_pin)
 {
@@ -425,7 +428,6 @@ static void rf_rx_stop(void)
 
 static void rf_rx(void)
 {
-	static uint8_t block[IQ_BLOCK_LEN];
 	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
 	unsigned pos = 0;
 
@@ -453,6 +455,7 @@ static void rf_rx(void)
 
 		pos = (pos + RX_STRIDE) & (RX_WORDS - 1);
 
+		uint8_t *block = iq_queue_buffer[iq_queue_pos];
 		uint8_t *blockptr = block;
 
 		/*
@@ -529,7 +532,9 @@ static void rf_rx(void)
 			*blockptr++ = (uint8_t)Q + 128;
 		}
 
-		(void)queue_try_add(&iq_queue, block);
+		if (queue_try_add(&iq_queue, &block)) {
+			iq_queue_pos = (iq_queue_pos + 1) & (IQ_QUEUE_LEN - 1);
+		}
 	}
 }
 
@@ -607,9 +612,9 @@ static void do_rx(int rx_pin, int bias_pin)
 
 	multicore_launch_core1(rf_rx);
 
-	static uint8_t block[IQ_BLOCK_LEN];
+	const uint8_t *block;
 
-	while (queue_try_remove(&iq_queue, block))
+	while (queue_try_remove(&iq_queue, &block))
 		/* Flush the queue */;
 
 	while (true) {
@@ -619,8 +624,8 @@ static void do_rx(int rx_pin, int bias_pin)
 			if (0 == cmd)
 				goto done;
 
-		if (queue_try_remove(&iq_queue, block)) {
-			fwrite(block, sizeof block, 1, stdout);
+		if (queue_try_remove(&iq_queue, &block)) {
+			fwrite(block, IQ_BLOCK_LEN, 1, stdout);
 			fflush(stdout);
 		}
 	}
@@ -660,7 +665,7 @@ int main()
 	stdio_usb_init();
 	setvbuf(stdout, NULL, _IONBF, 0);
 
-	queue_init(&iq_queue, IQ_BLOCK_LEN, 256);
+	queue_init(&iq_queue, sizeof(uint8_t *), IQ_QUEUE_LEN);
 
 	rx_lo_init(INIT_FREQ);
 
