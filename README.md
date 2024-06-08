@@ -8,6 +8,8 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
 
 ![](circuit.svg)
 
+Note: This circuit is mandatory for (any) reception to happen.
+
 ## Software
 
 1. Clone using `git clone --recursive` as this package is using a custom USB
@@ -25,11 +27,31 @@ See the [blog post](https://blog.porucha.net/2024/pico-sdr/) for more informatio
 3. Start the USB serial to TCP bridge:
 
    ```bash
-   python util/bridge.py
+   python3 util/bridge.py
    ```
 
-   You need to have PySerial and Click packages installed.
+   You need to have PySerial and Click packages installed. They can be installed using the following command:
+
+   ```
+   pip3 install -r requirements.txt
+   ```
 
 4. Open `grc/PicoSDR-WBFM.grc` in GNU Radio Companion, adjust carrier frequency to match your favorite FM radio station and press `F6`.
 
 5. Alternatively [gqrx](https://www.gqrx.dk/) works fine with `rtl_tcp` input mode. Maximum sample rate seem to be 400 ksps, above that the samples are dropped.
+
+### Results
+
+It can receive local FT8 stations on 10m HF!
+
+![FT8 reception](./img/Screenshot_2024-06-08_21-44-04.png)
+
+It receives local FM traffic from a Baofeng UV-5R radio.
+
+![FM reception](./img/Screenshot_2024-06-09_20-43-43.png)
+
+### Challenges
+
+Can we receive DX FT8 stations somehow?
+
+Perhaps we will know once the `Antenna-RF-Amplifier-S9018` work is tested!
