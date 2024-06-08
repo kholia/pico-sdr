@@ -90,14 +90,14 @@ static void bias_init(int in_pin, int out_pin)
 
 	pio_gpio_init(pio1, out_pin);
 
+	pio1->input_sync_bypass = 1u << in_pin;
 	gpio_set_input_hysteresis_enabled(in_pin, false);
-	gpio_set_input_hysteresis_enabled(out_pin, false);
 	gpio_set_drive_strength(out_pin, GPIO_DRIVE_STRENGTH_2MA);
 	gpio_set_slew_rate(out_pin, GPIO_SLEW_RATE_SLOW);
 
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
-		pio_encode_set(pio_x, 31) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_set(pio_x, 4) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_jmp_x_dec(2) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
 
@@ -133,10 +133,6 @@ static void bias_init(int in_pin, int out_pin)
 
 static void watch_init(int in_pin)
 {
-	gpio_disable_pulls(in_pin);
-
-	gpio_set_input_hysteresis_enabled(in_pin, false);
-
 	const uint16_t insn[] = {
 		pio_encode_in(pio_pins, 1),
 	};
