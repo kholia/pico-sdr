@@ -72,7 +72,7 @@ def bridge(frequency):
 
                     while len(cmd) >= 5:
                         fp.write(cmd[:5])
-                        info = struct.unpack(">BL", cmd[:5])
+                        info = struct.unpack(">Bl", cmd[:6])
                         describe(*info)
                         cmd = cmd[5:]
 

@@ -83,6 +83,40 @@ static queue_t iq_queue;
 static uint8_t iq_queue_buffer[IQ_QUEUE_LEN][IQ_BLOCK_LEN];
 static size_t iq_queue_pos = 0;
 
+static void bias_set_delay(int delay)
+{
+	delay += 200;
+
+	if (delay < 0)
+		delay = 0;
+
+	if (delay >= 200)
+		delay = 512;
+
+	int bulk = delay / 16;
+	int rest = delay % 16;
+
+	if (0 == rest) {
+		bulk -= 1;
+		rest = 16;
+	}
+
+	if (delay > 0) {
+		if (bulk) {
+			pio1->instr_mem[11] = pio_encode_set(pio_x, bulk) |
+					      pio_encode_sideset(1, 0) | pio_encode_delay(rest - 1);
+		} else {
+			pio1->instr_mem[11] = pio_encode_jmp(10) | pio_encode_sideset(1, 0) |
+					      pio_encode_delay(rest - 1);
+		}
+
+		pio_sm_set_wrap(pio1, 0, 10, 12);
+	} else {
+		pio_sm_set_wrap(pio1, 0, 10, 10);
+		pio_sm_exec(pio1, 0, pio_encode_jmp(10));
+	}
+}
+
 static void bias_init(int in_pin, int out_pin)
 {
 	gpio_disable_pulls(in_pin);
@@ -97,7 +131,7 @@ static void bias_init(int in_pin, int out_pin)
 
 	const uint16_t insn[] = {
 		pio_encode_mov_not(pio_pins, pio_pins) | pio_encode_sideset(1, 1),
-		pio_encode_set(pio_x, 4) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
+		pio_encode_set(pio_x, 31) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 		pio_encode_jmp_x_dec(2) | pio_encode_sideset(1, 0) | pio_encode_delay(15),
 	};
 
@@ -546,6 +580,9 @@ static void run_command(uint8_t cmd, uint32_t arg)
 	} else if (0x04 == cmd) {
 		/* Set the tuner gain level */
 		gain = INIT_GAIN * powf(10.0f, 0.005f * arg);
+	} else if (0x05 == cmd) {
+		/* Set PPM error - hack to tweak bias strength */
+		bias_set_delay(arg);
 	} else if (0x0d == cmd) {
 		/* Set tuner gain by the tuner's gain index */
 		if (arg < NUM_GAINS) {
