@@ -459,8 +459,8 @@ static void rf_rx_stop(void)
 
 static void rf_rx(void)
 {
-	uint32_t *prev_addr = rx_cos;
-	unsigned pos = 0;
+	const uint32_t base = (uint32_t)rx_cos;
+	int pos = 0;
 
 	int64_t dcI = 0, dcQ = 0;
 	int prevI = 0, prevQ = 0;
@@ -472,19 +472,17 @@ static void rf_rx(void)
 			return;
 		}
 
-		uint32_t *this_addr = (uint32_t *)dma_hw->ch[dma_ch_in_cos].write_addr;
+		int head = (dma_hw->ch[dma_ch_in_cos].write_addr - base) / 4;
+		int delta = (head < pos ? head + RX_WORDS : head) - pos;
 
-		while (prev_addr <= this_addr && this_addr <= prev_addr + RX_STRIDE) {
-			this_addr = (uint32_t *)dma_hw->ch[dma_ch_in_cos].write_addr;
+		while (delta < RX_STRIDE) {
 			sleep_us(1);
+			head = (dma_hw->ch[dma_ch_in_cos].write_addr - base) / 4;
+			delta = (head < pos ? head + RX_WORDS : head) - pos;
 		}
 
-		prev_addr += RX_STRIDE;
-		if (prev_addr >= rx_cos + RX_WORDS)
-			prev_addr = rx_cos;
-
-		uint32_t *cos_ptr = rx_cos + pos;
-		uint32_t *sin_ptr = rx_sin + pos;
+		const uint32_t *cos_ptr = rx_cos + pos;
+		const uint32_t *sin_ptr = rx_sin + pos;
 
 		pos = (pos + RX_STRIDE) & (RX_WORDS - 1);
 
