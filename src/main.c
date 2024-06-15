@@ -459,7 +459,7 @@ static void rf_rx_stop(void)
 
 static void rf_rx(void)
 {
-	uint32_t prev_transfers = dma_hw->ch[dma_ch_in_cos].transfer_count;
+	uint32_t *prev_addr = rx_cos;
 	unsigned pos = 0;
 
 	int64_t dcI = 0, dcQ = 0;
@@ -472,14 +472,16 @@ static void rf_rx(void)
 			return;
 		}
 
-		int delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
+		uint32_t *this_addr = (uint32_t *)dma_hw->ch[dma_ch_in_cos].write_addr;
 
-		while (delta < RX_STRIDE) {
-			delta = prev_transfers - dma_hw->ch[dma_ch_in_cos].transfer_count;
+		while (prev_addr <= this_addr && this_addr <= prev_addr + RX_STRIDE) {
+			this_addr = (uint32_t *)dma_hw->ch[dma_ch_in_cos].write_addr;
 			sleep_us(1);
 		}
 
-		prev_transfers -= RX_STRIDE;
+		prev_addr += RX_STRIDE;
+		if (prev_addr >= rx_cos + RX_WORDS)
+			prev_addr = rx_cos;
 
 		uint32_t *cos_ptr = rx_cos + pos;
 		uint32_t *sin_ptr = rx_sin + pos;
@@ -632,7 +634,8 @@ static void do_rx(int rx_pin, int bias_pin)
 	channel_config_set_write_increment(&dma_conf, true);
 	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH);
 	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 2, false));
-	dma_channel_configure(dma_ch_in_cos, &dma_conf, rx_cos, &pio1->rxf[2], UINT_MAX, false);
+	channel_config_set_chain_to(&dma_conf, dma_ch_in_sin);
+	dma_channel_configure(dma_ch_in_cos, &dma_conf, rx_cos, &pio1->rxf[2], 2, false);
 
 	dma_conf = dma_channel_get_default_config(dma_ch_in_sin);
 	channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_32);
@@ -640,9 +643,8 @@ static void do_rx(int rx_pin, int bias_pin)
 	channel_config_set_write_increment(&dma_conf, true);
 	channel_config_set_ring(&dma_conf, true, RX_BITS_DEPTH);
 	channel_config_set_dreq(&dma_conf, pio_get_dreq(pio1, 3, false));
-	dma_channel_configure(dma_ch_in_sin, &dma_conf, rx_sin, &pio1->rxf[3], UINT_MAX, false);
-
-	dma_start_channel_mask((1 << dma_ch_in_sin) | (1 << dma_ch_in_cos));
+	channel_config_set_chain_to(&dma_conf, dma_ch_in_cos);
+	dma_channel_configure(dma_ch_in_sin, &dma_conf, rx_sin, &pio1->rxf[3], 2, true);
 
 	multicore_launch_core1(rf_rx);
 
