@@ -59,8 +59,8 @@ static int gains[NUM_GAINS] = { 0,   9,	  14,  27,  37,	 77,  87,  125, 144, 157
 static int gain = INIT_GAIN;
 static int sample_rate = INIT_SAMPLE_RATE;
 
-#define SIN_PHASE (UINT_MAX / 4)
-#define COS_PHASE (0)
+#define SIN_PHASE (0u)
+#define COS_PHASE (3u << 30)
 
 /* rx -> cp -> cos -> sin -> pio_cos -> pio_sin -> rx ... */
 static int dma_ch_rx = -1;
@@ -236,33 +236,35 @@ static void adder_init()
 	pio_sm_set_enabled(pio1, 3, true);
 }
 
-static void lo_generate(uint32_t *buf, size_t len, double freq, unsigned phase)
+static void lo_generate(uint32_t *buf, double freq, uint32_t phase)
 {
 	static const double base = (UINT_MAX + 1.0) / CLK_SYS_HZ;
 
-	unsigned step = base * freq;
-	unsigned accum = phase;
+	uint32_t step = base * freq;
 
-	for (size_t i = 0; i < len; i++) {
+	for (size_t i = 0; i < LO_WORDS; i++) {
 		unsigned bits = 0;
 
 		for (int j = 0; j < 32; j++) {
-			bits |= accum >> 31;
+			bits |= phase >> 31;
 			bits <<= 1;
-			accum += step;
+			phase += step;
 		}
 
 		buf[i] = bits;
 	}
 }
 
-static void rx_lo_init(double req_freq)
+static void rx_lo_init(double req_freq, bool align)
 {
 	const double step_hz = (double)CLK_SYS_HZ / (4 << LO_BITS_DEPTH);
-	double freq = round(req_freq / step_hz) * step_hz;
+	double freq = req_freq;
 
-	lo_generate(lo_cos, LO_WORDS, freq, COS_PHASE);
-	lo_generate(lo_sin, LO_WORDS, freq, SIN_PHASE);
+	if (align)
+		freq = round(freq / step_hz) * step_hz;
+
+	lo_generate(lo_cos, freq, COS_PHASE);
+	lo_generate(lo_sin, freq, SIN_PHASE);
 }
 
 static const uint32_t samp_insn[4] __attribute__((__aligned__(16)));
@@ -571,7 +573,7 @@ static void run_command(uint8_t cmd, uint32_t arg)
 {
 	if (0x01 == cmd) {
 		/* Tune to a new center frequency */
-		rx_lo_init(arg);
+		rx_lo_init(arg, true);
 	} else if (0x02 == cmd) {
 		/* Set the rate at which IQ sample pairs are sent */
 		sample_rate = arg;
@@ -699,7 +701,7 @@ int main()
 
 	queue_init(&iq_queue, sizeof(uint8_t *), IQ_QUEUE_LEN);
 
-	rx_lo_init(INIT_FREQ);
+	rx_lo_init(INIT_FREQ, true);
 
 	while (true) {
 		if (check_command() > 0) {
